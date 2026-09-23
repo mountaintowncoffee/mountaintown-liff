@@ -351,13 +351,17 @@ async function submitLeave() {
 async function submitMakeup() {
   const date=document.getElementById('mkDate').value;
   if(!date){toast('請選擇日期');return;}
-  const r=await post('makeupPunch',{date,clockIn:document.getElementById('mkIn').value||null,
-    clockOut:document.getElementById('mkOut').value||null,note:document.getElementById('mkNote').value||null});
+  const r=await post('makeupPunch',{
+    date,
+    clockIn:document.getElementById('mkIn').value||null,
+    clockOut:document.getElementById('mkOut').value||null,
+    note:document.getElementById('mkNote').value||null,
+    location:document.getElementById('mkLocation').value,
+  });
   if(r.error){toast('❌ '+r.error);return;}
   toast('✅ 補打卡申請已送出，等待審核');
   setTimeout(()=>show('sMenu'),1500);
 }
-
 // ─ Attendance ─
 async function loadAttendance() {
   show('sAtt');
