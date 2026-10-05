@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>貓燙員工系統</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root {
+  --green:#06C755; --bg:#f5f5f5; --card:#fff; --text:#1a1a1a;
+  --sub:#666; --border:#e5e5e5; --r:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+.header{background:var(--green);color:#fff;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+.header-wrap{display:flex;align-items:center;gap:8px}
+.back{background:none;border:none;color:#fff;font-size:26px;cursor:pointer;padding:0;line-height:1}
+.header-title{font-size:18px;font-weight:600}
+.header-sub{font-size:13px;opacity:.85;margin-top:2px}
+.content{flex:1;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.btn{display:block;width:100%;padding:14px;border-radius:var(--r);font-size:16px;font-weight:500;border:none;cursor:pointer;text-align:center;margin-top:8px}
+.btn-primary{background:var(--green);color:#fff}
+.btn-secondary{background:var(--border);color:var(--text)}
+.btn:disabled{opacity:.4}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.menu-item{background:var(--card);border-radius:var(--r);padding:20px 12px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer;border:1px solid var(--border)}
+.menu-item.soon{opacity:.5}
+.menu-icon{font-size:28px;margin-bottom:8px}
+.menu-name{font-size:14px;font-weight:500}
+.menu-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.form-group{margin-bottom:14px}
+.label{font-size:13px;color:var(--sub);margin-bottom:5px;display:block}
+.select{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:15px;background:var(--card);color:var(--text)}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500;margin:2px 1px}
+.ok{background:#e6f7ed;color:#0a7a41}
+.warn{background:#fff3e0;color:#e65100}
+.blue{background:#e3f2fd;color:#1565c0}
+.gray{background:var(--border);color:var(--sub)}
+.list-item{padding:11px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.list-item:last-child{border-bottom:none}
+.clock-display{font-size:52px;font-weight:200;text-align:center;margin:12px 0 4px;font-variant-numeric:tabular-nums}
+.clock-date{text-align:center;color:var(--sub);font-size:14px;margin-bottom:14px}
+.stat-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px}
+.stat-val{font-weight:600}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+.loc-status{font-size:13px;color:var(--sub);margin-bottom:12px;min-height:20px;text-align:center}
+.month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.month-nav button{background:var(--card);border:1px solid var(--border);border-radius:8px;width:44px;height:36px;font-size:18px;cursor:pointer}
+.input{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:15px;background:var(--card);color:var(--text)}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.btn-row .btn{margin-top:0;padding:11px;font-size:15px}
+.hint{font-size:12px;color:#999;margin-top:6px}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading" id="sLoading">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:#666">載入中...</div>
+</div>
+
+<!-- Bind -->
+<div class="screen" id="sBind">
+  <div class="header"><div class="header-title">🐱 貓燙員工系統</div><div class="header-sub">首次使用請選擇您的姓名</div></div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group">
+        <label class="label">選擇您的姓名</label>
+        <select class="select" id="bindSel"><option value="">請選擇...</option></select>
+      </div>
+      <button class="btn btn-primary" id="btnBind" onclick="bindAccount()">確認綁定</button>
+    </div>
+    <div style="font-size:12px;color:#999;text-align:center;margin-top:8px">每個 LINE 帳號只能綁定一位員工，綁定後無法自行更改</div>
+  </div>
+</div>
+
+<!-- Menu -->
+<div class="screen" id="sMenu">
+  <div class="header"><div class="header-title">🐱 貓燙員工系統</div><div class="header-sub" id="welcome">歡迎回來</div></div>
+  <div class="content">
+    <div class="menu-grid">
+      <div class="menu-item" onclick="show('sClock')"><div class="menu-icon">👊</div><div class="menu-name">打卡</div><div class="menu-sub">上班 / 下班</div></div>
+      <div class="menu-item" onclick="loadAttendance()"><div class="menu-icon">📊</div><div class="menu-name">我的出勤</div><div class="menu-sub">本月記錄</div></div>
+      <div class="menu-item" onclick="openLeave()"><div class="menu-icon">📅</div><div class="menu-name">申請假期</div><div class="menu-sub">特休/餘假/事假/病假</div></div>
+      <div class="menu-item" onclick="openMakeup()"><div class="menu-icon">✏️</div><div class="menu-name">補打卡</div><div class="menu-sub">忘記打卡補申請</div></div>
+      <div class="menu-item soon" onclick="soon()"><div class="menu-icon">🎯</div><div class="menu-name">獎金進度</div><div class="menu-sub">即將開放</div></div>
+      <div class="menu-item soon" onclick="soon()"><div class="menu-icon">💰</div><div class="menu-name">薪資單</div><div class="menu-sub">即將開放</div></div>
+      <div class="menu-item" id="menuReview" style="display:none" onclick="openReview()"><div class="menu-icon">🗂️</div><div class="menu-name">待審核</div><div class="menu-sub">補打卡、請假申請</div></div>
+      <div class="menu-item" id="menuTyphoon" style="display:none" onclick="openTyphoon()"><div class="menu-icon">🌀</div><div class="menu-name">颱風假</div><div class="menu-sub">宣布停班</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Clock -->
+<div class="screen" id="sClock">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">打卡</div></div></div>
+  <div class="content">
+    <div class="card" style="text-align:center">
+      <div class="clock-display" id="clockTime">--:--:--</div>
+      <div class="clock-date" id="clockDate"></div>
+      <div id="schedLine" style="font-size:14px;margin-bottom:10px;color:var(--sub)"></div>
+      <div id="clockStatus" style="font-size:14px"></div>
+    </div>
+    <div class="loc-status" id="locStatus"></div>
+    <button class="btn btn-primary" id="btnIn" onclick="doClock('in')" disabled>上班打卡</button>
+    <button class="btn btn-secondary" id="btnOut" onclick="doClock('out')" disabled>下班打卡</button>
+  </div>
+</div>
+
+<!-- Attendance -->
+<div class="screen" id="sAtt">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">我的出勤</div></div></div>
+  <div class="content">
+    <div class="month-nav">
+      <button onclick="shiftMonth(-1)">‹</button>
+      <div id="attMonth" style="font-weight:600"></div>
+      <button onclick="shiftMonth(1)">›</button>
+    </div>
+    <div id="attSummary" class="card"></div>
+    <div id="attList" class="card"></div>
+  </div>
+</div>
+
+<!-- Makeup -->
+<div class="screen" id="sMakeup">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">補打卡申請</div></div></div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group"><label class="label">日期（可補 14 天內）</label><input type="date" class="input" id="mkDate"></div>
+      <div class="form-group"><label class="label">補打上班時間（如有）</label><input type="time" class="input" id="mkIn"></div>
+      <div class="form-group"><label class="label">補打下班時間（如有）</label><input type="time" class="input" id="mkOut"></div>
+      <div class="form-group"><label class="label">原因（必填）</label><input type="text" class="input" id="mkReason" maxlength="200" placeholder="例：忘記打下班卡"></div>
+      <button class="btn btn-primary" id="btnMk" onclick="submitMakeup()">送出申請</button>
+      <div class="hint">送出後由負責人審核，核准或拒絕都會用 LINE 通知您。</div>
+    </div>
+    <div class="card" id="mkList"></div>
+  </div>
+</div>
+
+<!-- Leave -->
+<div class="screen" id="sLeave">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">申請假期</div></div></div>
+  <div class="content">
+    <div class="card" id="lvBal"></div>
+    <div class="card">
+      <div class="form-group"><label class="label">假別</label>
+        <select class="select" id="lvType">
+          <option value="特休">特休（全薪）</option>
+          <option value="餘假">餘假（全薪）</option>
+          <option value="事假">事假（不計薪）</option>
+          <option value="病假">病假（半薪）</option>
+        </select></div>
+      <div class="form-group"><label class="label">整天或部分時段</label>
+        <select class="select" id="lvMode" onchange="toggleLvMode()">
+          <option value="full">整天（可連續多天）</option>
+          <option value="part">部分時段</option>
+        </select></div>
+      <div class="form-group"><label class="label">日期</label><input type="date" class="input" id="lvDate"></div>
+      <div class="form-group" id="lvEndBox"><label class="label">結束日期（連續請假才需要，單日免填）</label><input type="date" class="input" id="lvEnd"></div>
+      <div id="lvTimeBox" style="display:none">
+        <div class="form-group"><label class="label">請假開始時間</label><input type="time" class="input" id="lvFrom"></div>
+        <div class="form-group"><label class="label">請假結束時間</label><input type="time" class="input" id="lvTo"></div>
+      </div>
+      <div class="form-group"><label class="label">原因（選填）</label><input type="text" class="input" id="lvReason" maxlength="200" placeholder="例：看診"></div>
+      <button class="btn btn-primary" id="btnLv" onclick="submitLeave()">送出申請</button>
+      <div class="hint">只能在有排班的日子請假，沒排班的日子會自動略過。送出後由負責人審核，結果會用 LINE 通知您。</div>
+    </div>
+    <div class="card" id="lvList"></div>
+  </div>
+</div>
+
+<!-- Review (owner) -->
+<div class="screen" id="sReview">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">待審核</div></div></div>
+  <div class="content"><div id="reviewList"></div></div>
+</div>
+
+<!-- Typhoon (owner) -->
+<div class="screen" id="sTyphoon">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">宣布颱風假</div></div></div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group"><label class="label">日期</label><input type="date" class="input" id="tyDate" onchange="loadTyphoonList()"></div>
+    </div>
+    <div class="card" id="tyList"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:#ccc;pointer-events:none">v2.3.0</div>
+
+<script>
+const LIFF_ID = '2011700774-SyRPvpY4';
+// ↓↓↓ 部署新的 Apps Script 後，把「網路應用程式」網址貼在這裡 ↓↓↓
+const API = 'https://script.google.com/macros/s/AKfycbxZH5DNK9AuH2HQNCY4PHAgPvqcH6NPimmIzI5Vad1lljNp6458cVaPKpPqz_8m4ynKNQ/exec';
+
+let clockTimer = null, busy = false, attY = 0, attM = 0;
+
+// ─ 工具 ─
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function soon() { toast('這個功能即將開放'); }
+function show(id) {
+  document.getElementById('sLoading').style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+  if (id === 'sClock') startClock();
+}
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Taipei'});
+}
+function taipeiToday() { return new Date().toLocaleDateString('sv-SE', {timeZone: 'Asia/Taipei'}); }
+
+// 所有請求：附上 LIFF access token，由後端向 LINE 驗證身分
+async function call(action, data = {}) {
+  const token = liff.getAccessToken();
+  if (!token) { liff.login(); throw new Error('登入中，請稍候...'); }
+  let res;
+  try {
+    res = await fetch(API, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=UTF-8'},   // 避免 CORS preflight
+      body: JSON.stringify({action, accessToken: token, ...data})
+    });
+  } catch (e) { throw new Error('連線失敗，請檢查網路後再試'); }
+  const r = await res.json();
+  if (r.code === 'AUTH') { toast('登入已過期，重新登入中...'); setTimeout(() => { liff.logout(); liff.login(); }, 1200); }
+  return r;
+}
+
+// ─ 初始化 ─
+async function init() {
+  try {
+    if (API.indexOf('【') === 0) throw new Error('尚未設定 API 網址');
+    await liff.init({liffId: LIFF_ID});
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    const r = await call('getMe');
+    if (r.error) throw new Error(r.error);
+    if (r.bound) {
+      document.getElementById('welcome').textContent = '歡迎回來，' + r.employee.name;
+      applyRole(r.employee);
+      show('sMenu');
+    } else {
+      const sel = document.getElementById('bindSel');
+      (r.unboundList || []).forEach(n => {
+        const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+      show('sBind');
+    }
+  } catch (e) {
+    document.getElementById('sLoading').innerHTML =
+      '<div style="padding:24px;color:#c62828;text-align:center">載入失敗：' + esc(e.message || e) + '</div>';
+  }
+}
+
+// ─ 綁定 ─
+async function bindAccount() {
+  const name = document.getElementById('bindSel').value;
+  if (!name) { toast('請選擇姓名'); return; }
+  const btn = document.getElementById('btnBind');
+  btn.disabled = true; btn.textContent = '綁定中，請稍候...';
+  try {
+    const r = await call('bindLine', {staffName: name});
+    if (r.error) { toast('❌ ' + r.error, 4000); btn.disabled = false; btn.textContent = '確認綁定'; return; }
+    document.getElementById('welcome').textContent = '歡迎回來，' + name;
+    toast('✅ 綁定成功！');
+    try { const me = await call('getMe'); if (me.employee) applyRole(me.employee); } catch (e) {}
+    setTimeout(() => show('sMenu'), 1000);
+  } catch (e) {
+    toast('❌ ' + (e.message || e), 4000);
+    btn.disabled = false; btn.textContent = '確認綁定';
+  }
+}
+
+// ─ 打卡 ─
+function startClock() {
+  function tick() {
+    const now = new Date();
+    document.getElementById('clockTime').textContent =
+      now.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Taipei'});
+    document.getElementById('clockDate').textContent =
+      now.toLocaleDateString('zh-TW', {year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Taipei'});
+  }
+  tick(); clockTimer = setInterval(tick, 1000);
+  document.getElementById('locStatus').textContent = '';
+  loadClock();
+}
+
+const LEAVE_NAME = {'休': '休息日', '例': '例假', '特': '特休', '餘': '餘假', '事': '事假', '病': '病假', '颱': '颱風假'};
+const SHIFT_NAME = {A: 'A 班', B: 'B 班', W: '工作室班'};
+
+async function loadClock() {
+  const sched = document.getElementById('schedLine'), st = document.getElementById('clockStatus');
+  try {
+    const r = await call('clockStatus');
+    if (r.error) { st.innerHTML = '<span class="badge warn">' + esc(r.error) + '</span>'; return; }
+    const s = r.schedule;
+    if (!s) sched.textContent = '今日班表：未排班';
+    else if (s.leave_code) sched.textContent = '今日班表：' + (LEAVE_NAME[s.leave_code] || s.leave_code);
+    else sched.textContent = '今日班表：' + (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+
+    if ((r.leaves || []).length) {
+      sched.textContent += '　｜　請假：' + r.leaves.map(l => l.type + ' ' + l.start + '–' + l.end).join('、');
+    }
+    const recs = r.records || [];
+    st.innerHTML = recs.length
+      ? recs.map(x => '<span class="badge ' + (x.type === 'in' ? 'ok' : 'blue') + '">' + (x.type === 'in' ? '上班 ' : '下班 ') + fmt(x.time) + '</span>').join('')
+        + (r.state === 'in' ? '<span class="badge warn">上班中</span>' : '')
+      : '<span class="badge gray">今日尚未打卡</span>';
+    applyButtons(r.state);
+  } catch (e) { st.innerHTML = '<span class="badge warn">' + esc(e.message || e) + '</span>'; }
+}
+
+let lastState = null;
+function applyButtons(state) {
+  if (state) lastState = state;
+  document.getElementById('btnIn').disabled = busy || lastState !== 'none' && lastState !== 'out';
+  document.getElementById('btnOut').disabled = busy || lastState !== 'in';
+}
+
+function getPos() {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('此裝置不支援定位'));
+    navigator.geolocation.getCurrentPosition(res,
+      e => rej(new Error(e.code === 1 ? '請允許 LINE 使用定位權限' : '無法取得定位，請到訊號較好的地方再試')),
+      {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+  });
+}
+
+async function doClock(type) {
+  if (busy) return;
+  busy = true; applyButtons();
+  const loc = document.getElementById('locStatus');
+  try {
+    loc.textContent = '📍 取得定位中...';
+    const pos = await getPos();
+    loc.textContent = '已取得定位，打卡中...';
+    const r = await call(type === 'in' ? 'clockIn' : 'clockOut', {lat: pos.coords.latitude, lng: pos.coords.longitude});
+    if (r.error) {
+      loc.textContent = '❌ ' + r.error;
+      toast('❌ ' + r.error, 4000);
+    } else {
+      loc.textContent = '✅ 打卡地點：' + r.location + '（' + r.distance + ' 公尺）';
+      toast(type === 'in' ? '✅ 上班打卡成功！' : '✅ 下班打卡成功！');
+    }
+  } catch (e) {
+    loc.textContent = '❌ ' + (e.message || e);
+    toast('❌ ' + (e.message || e), 4000);
+  }
+  busy = false;
+  await loadClock();
+  applyButtons();
+}
+
+// ─ 我的出勤 ─
+function loadAttendance() {
+  const p = taipeiToday().split('-');
+  attY = Number(p[0]); attM = Number(p[1]);
+  show('sAtt');
+  renderAtt();
+}
+function shiftMonth(d) {
+  attM += d;
+  if (attM < 1) { attM = 12; attY--; }
+  if (attM > 12) { attM = 1; attY++; }
+  renderAtt();
+}
+async function renderAtt() {
+  document.getElementById('attMonth').textContent = attY + ' 年 ' + attM + ' 月';
+  const sum = document.getElementById('attSummary'), list = document.getElementById('attList');
+  sum.innerHTML = '<div style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  list.innerHTML = '';
+  try {
+    const r = await call('getAttendance', {year: attY, month: attM});
+    if (r.error) { sum.textContent = r.error; return; }
+    const today = r.today, byDate = {};
+    (r.records || []).forEach(x => { (byDate[x.work_date] = byDate[x.work_date] || []).push(x); });
+
+    const wk = ['日', '一', '二', '三', '四', '五', '六'];
+    let total = 0, rows = [];
+    Object.keys(byDate).sort().reverse().forEach(d => {
+      let open = null, h = 0, segs = [];
+      byDate[d].forEach(x => {
+        if (x.punch_type === 'in') { if (open) segs.push({a: open, b: null}); open = x.punch_time; }
+        else if (open) { segs.push({a: open, b: x.punch_time}); h += (new Date(x.punch_time) - new Date(open)) / 36e5; open = null; }
+      });
+      if (open) segs.push({a: open, b: null});
+      total += h;
+      const dangling = segs.some(s => !s.b);
+      const tag = dangling ? (d === today ? '<span class="badge blue">上班中</span>' : '<span class="badge warn">未下班</span>')
+                           : '<span class="badge ok">✓ ' + h.toFixed(1) + 'h</span>';
+      const dow = wk[new Date(d + 'T12:00:00+08:00').getDay()];
+      rows.push('<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(d.slice(5)) +
+        ' <span style="font-size:11px;color:#999">週' + dow + '</span></div>' +
+        '<div style="font-size:12px;color:#666">' + segs.map(s => fmt(s.a) + '–' + (s.b ? fmt(s.b) : '未下班')).join('、') +
+        '</div></div>' + tag + '</div>');
+    });
+    sum.innerHTML = '<div class="stat-row"><span>出勤天數</span><span class="stat-val">' + Object.keys(byDate).length + ' 天</span></div>' +
+      '<div class="stat-row"><span>打卡總時數</span><span class="stat-val">' + total.toFixed(1) + ' h</span></div>' +
+      '<div style="font-size:11px;color:#999">時數為打卡上下班時間相加，尚未扣除休息時間，實際以薪資單為準</div>';
+    list.innerHTML = rows.length ? rows.join('') : '<div style="text-align:center;color:#999;padding:12px">這個月沒有打卡紀錄</div>';
+  } catch (e) { sum.textContent = e.message || e; }
+}
+
+// ─ 角色 ─
+function applyRole(emp) {
+  const isOwner = emp && emp.role === '負責人';
+  document.getElementById('menuReview').style.display = isOwner ? '' : 'none';
+  document.getElementById('menuTyphoon').style.display = isOwner ? '' : 'none';
+  window.myEmploymentType = emp ? emp.employment_type : null;
+}
+function addDays(dateStr, n) {
+  return new Date(new Date(dateStr + 'T12:00:00+08:00').getTime() + n * 86400000)
+    .toLocaleDateString('sv-SE', {timeZone: 'Asia/Taipei'});
+}
+function dowOf(d) { return ['日', '一', '二', '三', '四', '五', '六'][new Date(d + 'T12:00:00+08:00').getDay()]; }
+const TYPE_TXT = {in: '上班', out: '下班'};
+const STATUS_TAG = {
+  pending: '<span class="badge warn">待審核</span>',
+  approved: '<span class="badge ok">已核准</span>',
+  rejected: '<span class="badge gray">未通過</span>',
+  cancelled: '<span class="badge gray">已取消</span>'
+};
+
+// ─ 補打卡（員工）─
+function openMakeup() {
+  const today = taipeiToday(), el = document.getElementById('mkDate');
+  el.max = today; el.min = addDays(today, -14);
+  if (!el.value) el.value = today;
+  show('sMakeup');
+  loadMyMakeups();
+}
+
+async function submitMakeup() {
+  const date = document.getElementById('mkDate').value;
+  const inT = document.getElementById('mkIn').value, outT = document.getElementById('mkOut').value;
+  const reason = document.getElementById('mkReason').value.trim();
+  if (!date) { toast('請選擇日期'); return; }
+  if (!inT && !outT) { toast('請至少填上班或下班時間'); return; }
+  if (!reason) { toast('請填寫原因'); return; }
+  const btn = document.getElementById('btnMk');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await call('submitMakeup', {date, inTime: inT, outTime: outT, reason});
+    if (r.error) toast('❌ ' + r.error, 4500);
+    else {
+      toast('✅ 已送出，等待負責人審核');
+      document.getElementById('mkIn').value = ''; document.getElementById('mkOut').value = '';
+      document.getElementById('mkReason').value = '';
+      loadMyMakeups();
+    }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  btn.disabled = false; btn.textContent = '送出申請';
+}
+
+async function loadMyMakeups() {
+  const box = document.getElementById('mkList');
+  box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div><div style="color:#999;font-size:13px">載入中...</div>';
+  try {
+    const r = await call('myMakeups');
+    if (r.error) { box.textContent = r.error; return; }
+    const rows = (r.items || []).map(x =>
+      '<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(x.work_date.slice(5)) +
+      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + TYPE_TXT[x.punch_type] + ' ' + fmt(x.requested_time) + '</div>' +
+      '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') + '</div></div>' +
+      (STATUS_TAG[x.status] || '') + '</div>').join('');
+    box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div>' +
+      (rows || '<div style="color:#999;font-size:13px">還沒有申請紀錄</div>');
+  } catch (e) { box.textContent = e.message || e; }
+}
+
+// ─ 待審核（負責人）─
+function openReview() { show('sReview'); renderReview(); }
+
+async function renderReview() {
+  const box = document.getElementById('reviewList');
+  box.innerHTML = '<div class="card" style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  try {
+    const [mk, lv] = await Promise.all([call('pendingMakeups'), call('pendingLeaves')]);
+    if (mk.error) { box.innerHTML = '<div class="card">' + esc(mk.error) + '</div>'; return; }
+    if (lv.error) { box.innerHTML = '<div class="card">' + esc(lv.error) + '</div>'; return; }
+    if (!mk.items.length && !lv.items.length) {
+      box.innerHTML = '<div class="card" style="text-align:center;color:#999">目前沒有待審核的申請 🎉</div>'; return;
+    }
+    box.innerHTML =
+      (lv.items.length ? '<div class="hint" style="margin:0 4px 6px">請假申請（' + lv.items.length + '）</div>' + lv.items.map(leaveCard).join('') : '') +
+      (mk.items.length ? '<div class="hint" style="margin:6px 4px">補打卡申請（' + mk.items.length + '）</div>' + mk.items.map(reviewCard).join('') : '') +
+      '<div class="hint" style="margin:10px 4px 6px">要作廢已核准的假期，請告知負責人（Claude）處理</div>';
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+
+function leaveCard(x) {
+  const s = x.schedule;
+  const sched = !s ? '未排班' : (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+  const id = esc(x.leave_id);
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
+    '<div style="font-size:18px;margin:8px 0">' + esc(x.leave_type) + ' <b>' + esc(x.start) + '–' + esc(x.end) + '</b> <span style="font-size:13px;color:#666">（' + x.days + ' 天）</span></div>' +
+    '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
+    '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
+    (x.remaining !== null ? '<div style="font-size:12px;color:#666;margin-top:4px">' + esc(x.leave_type) + '目前餘額：' + x.remaining + ' 天</div>' : '') +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReviewLeave(\'' + id + '\',\'approve\')">核准</button>' +
+    '<button class="btn btn-secondary" onclick="doReviewLeave(\'' + id + '\',\'reject\')">拒絕</button></div></div>';
+}
+
+function reviewCard(x) {
+  const s = x.schedule;
+  const sched = !s ? '未排班' : s.leave_code ? (LEAVE_NAME[s.leave_code] || s.leave_code)
+    : (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+  const ps = (x.punches || []).map(p =>
+    '<span class="badge ' + (p.type === 'in' ? 'ok' : 'blue') + '">' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</span>').join('');
+  const id = esc(x.request_id);
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
+    '<div style="font-size:18px;margin:8px 0">補 ' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.requested_time) + '</b></div>' +
+    '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
+    '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
+    '<div style="font-size:12px;color:#666;margin-top:4px">既有打卡：' + (ps || '<span class="badge gray">無</span>') + '</div>' +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReview(\'' + id + '\',\'approve\')">核准</button>' +
+    '<button class="btn btn-secondary" onclick="doReview(\'' + id + '\',\'reject\')">拒絕</button></div></div>';
+}
+
+let reviewing = false;
+async function doReview(id, decision) {
+  if (reviewing) return;
+  let note = '';
+  if (decision === 'reject') {
+    const n = prompt('拒絕原因（員工會收到，可留空）');
+    if (n === null) return;
+    note = n;
+  } else if (!confirm('確定核准這筆補打卡？')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewMakeup', {requestId: id, decision, note});
+    if (r.error) toast('❌ ' + r.error, 5000);
+    else toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+
+// ─ 請假（員工）─
+function openLeave() {
+  const sel = document.getElementById('lvType');
+  Array.from(sel.options).forEach(o => { o.hidden = (window.myEmploymentType === '兼職') && (o.value === '餘假' || o.value === '事假'); });
+  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '特休';
+  const today = taipeiToday();
+  const d = document.getElementById('lvDate'), e = document.getElementById('lvEnd');
+  d.min = addDays(today, -14); d.max = addDays(today, 60);
+  e.min = d.min; e.max = addDays(today, 60);
+  if (!d.value) d.value = today;
+  show('sLeave');
+  loadMyLeaves();
+}
+function toggleLvMode() {
+  const part = document.getElementById('lvMode').value === 'part';
+  document.getElementById('lvTimeBox').style.display = part ? 'block' : 'none';
+  document.getElementById('lvEndBox').style.display = part ? 'none' : 'block';
+}
+
+async function submitLeave() {
+  const type = document.getElementById('lvType').value;
+  const part = document.getElementById('lvMode').value === 'part';
+  const date = document.getElementById('lvDate').value;
+  const endDate = document.getElementById('lvEnd').value;
+  const from = document.getElementById('lvFrom').value, to = document.getElementById('lvTo').value;
+  if (!date) { toast('請選擇日期'); return; }
+  if (part && (!from || !to)) { toast('請填寫請假的開始與結束時間'); return; }
+  const btn = document.getElementById('btnLv');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await call('submitLeave', {type, date, full: !part, endDate: part ? '' : endDate, from, to,
+      reason: document.getElementById('lvReason').value.trim()});
+    if (r.error) toast('❌ ' + r.error, 5000);
+    else {
+      toast('✅ 已送出 ' + r.count + ' 筆，等待負責人審核' + (r.skipped && r.skipped.length ? '（沒排班已略過：' + r.skipped.join('、') + '）' : ''), 5000);
+      document.getElementById('lvReason').value = '';
+      document.getElementById('lvEnd').value = '';
+      loadMyLeaves();
+    }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  btn.disabled = false; btn.textContent = '送出申請';
+}
+
+async function loadMyLeaves() {
+  const bal = document.getElementById('lvBal'), box = document.getElementById('lvList');
+  bal.innerHTML = '<div style="color:#999;font-size:13px">載入中...</div>'; box.innerHTML = '';
+  try {
+    const r = await call('myLeaves');
+    if (r.error) { bal.textContent = r.error; return; }
+    bal.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的假期餘額</div>' +
+      ((r.balances || []).length
+        ? r.balances.map(b => '<div class="stat-row"><span>' + esc(b.type) + '（' + esc(b.expiry) + ' 到期）</span><span class="stat-val">' + b.remaining + ' 天</span></div>').join('')
+        : '<div style="color:#999;font-size:13px">尚未設定特休／餘假餘額，需要請特休或餘假請聯絡負責人</div>');
+    const rows = (r.items || []).map(x =>
+      '<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(x.work_date.slice(5)) +
+      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + esc(x.leave_type) + ' ' + fmt(x.start_datetime) + '–' + fmt(x.end_datetime) +
+      '（' + Number(x.leave_days) + ' 天）</div>' +
+      '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') + '</div></div>' +
+      '<div style="text-align:right">' + (STATUS_TAG[x.status] || '') +
+      (x.status === 'pending' ? '<div><button style="margin-top:4px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff" onclick="cancelLeave(\'' + esc(x.leave_id) + '\')">取消</button></div>' : '') +
+      '</div></div>').join('');
+    box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div>' +
+      (rows || '<div style="color:#999;font-size:13px">還沒有申請紀錄</div>');
+  } catch (e) { bal.textContent = e.message || e; }
+}
+
+async function cancelLeave(id) {
+  if (!confirm('確定取消這筆請假申請？')) return;
+  try {
+    const r = await call('cancelLeave', {leaveId: id});
+    toast(r.error ? '❌ ' + r.error : '已取消', 4000);
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  loadMyLeaves();
+}
+
+// ─ 請假審核（負責人）─
+async function doReviewLeave(id, decision) {
+  if (reviewing) return;
+  let note = '';
+  if (decision === 'reject') {
+    const n = prompt('拒絕原因（員工會收到，可留空）');
+    if (n === null) return;
+    note = n;
+  } else if (!confirm('確定核准這筆請假？（特休、餘假會同時扣除餘額）')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewLeave', {leaveId: id, decision, note});
+    if (r.error) toast('❌ ' + r.error, 5500);
+    else toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+
+// ─ 颱風假（負責人）─
+function openTyphoon() {
+  const el = document.getElementById('tyDate');
+  if (!el.value) el.value = taipeiToday();
+  show('sTyphoon');
+  loadTyphoonList();
+}
+
+async function loadTyphoonList() {
+  const date = document.getElementById('tyDate').value;
+  const box = document.getElementById('tyList');
+  if (!date) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  try {
+    const r = await call('typhoonCandidates', {date});
+    if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+    if (!r.items.length) { box.innerHTML = '<div class="card" style="text-align:center;color:#999">這天沒有任何排班</div>'; return; }
+    box.innerHTML = '<div class="card">' +
+      r.items.map(x => '<label class="list-item" style="cursor:pointer">' +
+        '<div><div style="font-size:14px;font-weight:500">' + esc(x.name) + '</div>' +
+        '<div style="font-size:12px;color:#666">' + esc(x.start) + '–' + esc(x.end) + (x.already ? '　<span class="badge gray">已是颱風假</span>' : '') + '</div></div>' +
+        '<input type="checkbox" class="ty-chk" value="' + esc(x.employee_id) + '" ' + (x.already ? 'disabled' : 'checked') + '>' +
+        '</label>').join('') +
+      '<button class="btn btn-primary" id="btnTy" onclick="submitTyphoon()">宣布颱風假</button>' +
+      '<div class="hint">只會套用到有排班的人，已經是颱風假的不會重複處理。送出後會用 LINE 通知他們。</div></div>';
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+
+async function submitTyphoon() {
+  const date = document.getElementById('tyDate').value;
+  const ids = Array.from(document.querySelectorAll('.ty-chk:checked')).map(x => x.value);
+  if (!ids.length) { toast('請至少選一位員工'); return; }
+  if (!confirm('確定將 ' + date + ' 這 ' + ids.length + ' 人的班改為颱風假？')) return;
+  const btn = document.getElementById('btnTy');
+  btn.disabled = true; btn.textContent = '處理中...';
+  try {
+    const r = await call('declareTyphoon', {date, employeeIds: ids});
+    if (r.error) toast('❌ ' + r.error, 5000);
+    else { toast('✅ 已將 ' + r.count + ' 人設為颱風假'); loadTyphoonList(); }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  btn.disabled = false; btn.textContent = '宣布颱風假';
+}
+
+init();
+</script>
+</body>
+</html>
