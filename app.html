@@ -237,6 +237,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
           <option value="病假">病假</option>
           <option value="生理假">生理假</option>
           <option value="颱風假">颱風假</option>
+          <option value="公假">公假</option>
         </select></div>
       <div class="form-group"><label class="label">整天或部分時段</label>
         <select class="select" id="lvMode" onchange="toggleLvMode()">
@@ -312,7 +313,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.11.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.12.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -960,7 +961,7 @@ async function doReview(id, decision) {
 // ─ 請假（員工）─
 async function openLeave() {
   const sel = document.getElementById('lvType');
-  Array.from(sel.options).forEach(o => { o.hidden = (window.myEmploymentType === '兼職') && (o.value === '餘假' || o.value === '事假'); });
+  Array.from(sel.options).forEach(o => { o.hidden = (window.myEmploymentType === '兼職') && (o.value === '餘假' || o.value === '事假' || o.value === '公假'); });
   if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '特休';
   const today = taipeiToday();
   const d = document.getElementById('lvDate'), e = document.getElementById('lvEnd');
