@@ -97,6 +97,18 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 .an-item:last-child{border-bottom:none}
 .an-item .who{font-weight:600}
 .an-item .txt{color:#555;margin-top:2px;font-size:12px}
+.ps-net{font-size:30px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.ps-tot{display:flex;justify-content:space-between;font-size:14px;color:var(--sub)}
+.ps-h{display:flex;justify-content:space-between;font-weight:600;font-size:15px;margin-bottom:4px}
+.ps-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.ps-row:last-child{border-bottom:none}
+.ps-row .r{white-space:nowrap;font-variant-numeric:tabular-nums}
+.ps-sub{font-size:12px;color:var(--sub);margin-top:2px}
+.ps-minus{color:#c62828}
+.ps-chk{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.ps-chk input{width:18px;height:18px;margin-top:1px;accent-color:var(--green)}
+.ps-item{padding:12px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.ps-item:last-child{border-bottom:none}
 </style>
 </head>
 <body>
@@ -134,7 +146,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
       <div class="menu-item" onclick="openLeave()"><div class="menu-icon">📝</div><div class="menu-name">申請假期</div><div class="menu-sub">特休/餘假/事假/病假</div></div>
       <div class="menu-item" onclick="openMakeup()"><div class="menu-icon">🔫</div><div class="menu-name">補打卡</div><div class="menu-sub">忘記打卡補申請</div></div>
       <div class="menu-item soon" onclick="soon()"><div class="menu-icon">🎯</div><div class="menu-name">獎金進度</div><div class="menu-sub">即將開放</div></div>
-      <div class="menu-item soon" onclick="soon()"><div class="menu-icon">💰</div><div class="menu-name">薪資單</div><div class="menu-sub">即將開放</div></div>
+      <div class="menu-item" onclick="openPayslips()"><div class="menu-icon">💰</div><div class="menu-name">薪資單</div><div class="menu-sub">查看與確認</div></div>
       <div class="menu-item" id="menuReview" style="display:none" onclick="openReview()"><div class="menu-icon">🗂️</div><div class="menu-name">審核</div><div class="menu-sub">待審核、已審核</div></div>
       <div class="menu-item" id="menuAnomaly" style="display:none" onclick="openAnomalies()"><div class="menu-icon">🔎</div><div class="menu-name">異常清單</div><div class="menu-sub">月底核對</div></div>
     </div>
@@ -267,13 +279,48 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
   </div>
 </div>
 
+<!-- Payslip list -->
+<div class="screen" id="sPay">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">薪資單</div></div></div>
+  <div class="content">
+    <div class="card" id="payList"><div style="color:#999;font-size:14px">載入中…</div></div>
+    <div class="hint" style="text-align:center">點選月份查看薪資單明細</div>
+  </div>
+</div>
+
+<!-- Payslip detail -->
+<div class="screen" id="sPaySlip">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="openPayslips()">‹</button><div class="header-title" id="psTitle">薪資單</div></div></div>
+  <div class="content" id="psBody"></div>
+</div>
+
+<!-- Dispute -->
+<div class="screen" id="sPayDispute">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sPaySlip')">‹</button><div class="header-title">提出異議</div></div></div>
+  <div class="content">
+    <div class="card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:4px">哪些項目有問題？（可複選）</div>
+      <div id="dpItems"></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">異議內容（必填）</div>
+      <textarea class="input" id="dpContent" rows="4" maxlength="500" style="resize:vertical;font-family:inherit" placeholder="請說明哪裡不對，例如日期、時間、原因"></textarea>
+    </div>
+    <button class="btn btn-primary" id="btnDp" onclick="submitDispute()">送出異議</button>
+    <div class="hint" style="text-align:center;margin-top:10px">送出後負責人會收到通知，更正後的薪資單會再請你確認一次</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.10.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.11.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
 // ↓↓↓ 部署新的 Apps Script 後，把「網路應用程式」網址貼在這裡 ↓↓↓
 const API = 'https://script.google.com/macros/s/AKfycbxZH5DNK9AuH2HQNCY4PHAgPvqcH6NPimmIzI5Vad1lljNp6458cVaPKpPqz_8m4ynKNQ/exec';
+
+// 薪資單由獨立的「貓燙 Payroll API」提供（PayrollAPI.gs），和打卡的 API 分開
+const PAY_API = 'https://script.google.com/macros/s/AKfycbzORjzw_iG3Ah7zVv5rx2B67kzO48lB7glFkOdhwbcUzKmaJ6dugFJRHHVrhCMBi3pg/exec';
 
 let clockTimer = null, busy = false, attY = 0, attM = 0;
 
@@ -319,6 +366,142 @@ async function call(action, data = {}) {
   const r = await res.json();
   if (r.code === 'AUTH') { toast('登入已過期，重新登入中...'); setTimeout(() => { liff.logout(); liff.login(); }, 1200); }
   return r;
+}
+
+// 呼叫 Payroll API（同樣附上 LIFF access token，由後端向 LINE 驗證）
+async function payCall(action, data = {}) {
+  const token = liff.getAccessToken();
+  if (!token) { liff.login(); throw new Error('登入中，請稍候...'); }
+  let res;
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 40000);
+  try {
+    res = await fetch(PAY_API, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=UTF-8'},
+      body: JSON.stringify({action, accessToken: token, ...data}),
+      signal: ctl.signal
+    });
+  } catch (e) {
+    throw new Error(e && e.name === 'AbortError' ? '伺服器回應太慢（超過 40 秒），請稍後再試' : '連線失敗，請檢查網路後再試');
+  } finally { clearTimeout(tm); }
+  const r = await res.json();
+  if (r.code === 'AUTH') { toast('登入已過期，重新登入中...'); setTimeout(() => { liff.logout(); liff.login(); }, 1200); }
+  return r;
+}
+
+// ─ 薪資單 ─
+let paySlip = null, payView = null;
+const PAY_STATUS = {
+  published: ['待確認', 'warn'], confirmed: ['已確認', 'ok'], auto_confirmed: ['視同同意', 'gray'],
+  disputed: ['有異議・負責人處理中', 'blue'], draft: ['負責人更正中', 'blue']
+};
+function money(n) { return Number(n || 0).toLocaleString('zh-TW'); }
+function monthText(ym) { return ym.slice(0, 4) + ' 年 ' + Number(ym.slice(5, 7)) + ' 月'; }
+function mdText(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric', timeZone: 'Asia/Taipei'});
+}
+
+async function openPayslips() {
+  show('sPay');
+  const box = document.getElementById('payList');
+  box.innerHTML = '<div style="color:#999;font-size:14px">載入中…</div>';
+  try {
+    const r = await payCall('my_payslips');
+    if (r.error) throw new Error(r.error);
+    if (!r.rows.length) { box.innerHTML = '<div style="color:#999;font-size:14px">目前還沒有薪資單</div>'; return; }
+    box.innerHTML = r.rows.map(x => {
+      const st = PAY_STATUS[x.status] || [x.status, 'gray'];
+      const extra = x.status === 'confirmed' && x.confirmed_at ? ' ' + mdText(x.confirmed_at) : '';
+      return '<div class="ps-item" onclick="openPayslip(\'' + esc(x.payslip_id) + '\')">' +
+        '<div><div style="font-weight:600">' + esc(monthText(x.month)) + '</div>' +
+        '<span class="badge ' + st[1] + '">' + esc(st[0] + extra) + '</span></div>' +
+        '<div style="font-variant-numeric:tabular-nums">' + (x.status === 'draft' ? '—' : money(x.net)) + ' ›</div></div>';
+    }).join('');
+  } catch (e) { box.innerHTML = '<div style="color:#c62828;font-size:14px">' + esc(e.message || e) + '</div>'; }
+}
+
+async function openPayslip(id) {
+  show('sPaySlip');
+  const body = document.getElementById('psBody');
+  body.innerHTML = '<div class="card" style="color:#999">載入中…</div>';
+  try {
+    const r = await payCall('my_payslip', {payslip_id: id});
+    if (r.error) throw new Error(r.error);
+    paySlip = r.slip; payView = r.view;
+    renderPayslip();
+  } catch (e) { body.innerHTML = '<div class="card" style="color:#c62828">' + esc(e.message || e) + '</div>'; }
+}
+
+function renderPayslip() {
+  const s = paySlip, v = payView;
+  document.getElementById('psTitle').textContent = monthText(s.month) + ' 薪資單';
+  const st = PAY_STATUS[s.status] || [s.status, 'gray'];
+  const body = document.getElementById('psBody');
+  if (s.status === 'draft' || !v) {
+    body.innerHTML = '<div class="card"><span class="badge blue">負責人更正中</span>' +
+      '<div style="margin-top:10px;font-size:14px;color:#555">你提出的異議正在處理，更正後會用 LINE 通知你重新確認。</div></div>';
+    return;
+  }
+  const dl = s.confirm_deadline ? mdText(s.confirm_deadline) : '';
+  const rows = (list, minus) => list.map(x =>
+    '<div class="ps-row"><div>' + esc(x.category) + (x.sub ? '<div class="ps-sub">' + esc(x.sub) + '</div>' : '') + '</div>' +
+    '<div class="r' + (minus ? ' ps-minus' : '') + '">' + (minus ? '−' : '') + money(x.amount) + '</div></div>').join('');
+  let html =
+    '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b>' + esc(monthText(s.month)) + '</b>' +
+    '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span></div>' +
+    '<div class="hint" style="margin-top:6px">' + esc(s.name || '') + '　' + esc(s.employment_type || '') +
+    (s.status === 'published' && dl ? '　｜　請於 ' + esc(dl) + ' 23:59 前確認，逾期視同同意' : '') + '</div>' +
+    '<div class="ps-net">NT$ ' + money(s.net) + '</div>' +
+    '<div class="ps-tot"><span>應發 ' + money(s.gross) + '</span><span>扣除 ' + money(s.deduction) + '</span></div></div>' +
+    '<div class="card"><div class="ps-h"><span>應發項目</span><span>' + money(s.gross) + '</span></div>' + rows(v.earning, false) + '</div>' +
+    '<div class="card"><div class="ps-h"><span>扣除項目</span><span class="ps-minus">−' + money(s.deduction) + '</span></div>' + rows(v.deduction, true) + '</div>' +
+    '<div class="hint" style="margin:0 4px 12px">遲到、加班的每日時間，可到「班表與出勤」查看。</div>';
+  if (s.status === 'published' || s.status === 'confirmed') {
+    html += '<div class="btn-row">' +
+      (s.status === 'published' ? '<button class="btn btn-primary" id="btnPsOk" onclick="confirmPayslip()">確認無誤</button>' : '') +
+      '<button class="btn btn-secondary" onclick="openDispute()">提出異議</button></div>' +
+      '<div class="hint" style="text-align:center;margin-top:10px">確認與否都不影響發薪；有問題請按「提出異議」</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function confirmPayslip() {
+  const btn = document.getElementById('btnPsOk');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await payCall('my_confirm', {payslip_id: paySlip.payslip_id});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已確認');
+    openPayslip(paySlip.payslip_id);
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); btn.disabled = false; btn.textContent = '確認無誤'; }
+}
+
+function openDispute() {
+  const all = payView.earning.map(x => [x.category, money(x.amount)])
+    .concat(payView.deduction.map(x => [x.category, '−' + money(x.amount)]))
+    .concat([['其他', '']]);
+  document.getElementById('dpItems').innerHTML = all.map((x, i) =>
+    '<label class="ps-chk"><input type="checkbox" value="' + esc(x[0]) + '"><span>' + esc(x[0]) +
+    (x[1] ? '　' + esc(x[1]) : '（清單裡沒有的）') + '</span></label>').join('');
+  document.getElementById('dpContent').value = '';
+  const b = document.getElementById('btnDp'); b.disabled = false; b.textContent = '送出異議';
+  show('sPayDispute');
+}
+
+async function submitDispute() {
+  const items = Array.from(document.querySelectorAll('#dpItems input:checked')).map(x => x.value);
+  const content = document.getElementById('dpContent').value.trim();
+  if (!items.length) { toast('請勾選有問題的項目'); return; }
+  if (!content) { toast('請填寫異議內容'); return; }
+  const b = document.getElementById('btnDp');
+  b.disabled = true; b.textContent = '送出中...';
+  try {
+    const r = await payCall('my_dispute', {payslip_id: paySlip.payslip_id, items, content});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已送出，負責人會盡快處理');
+    openPayslip(paySlip.payslip_id);
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); b.disabled = false; b.textContent = '送出異議'; }
 }
 
 // ─ 初始化 ─
