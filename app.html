@@ -69,12 +69,12 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 .sched-day{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
 .sched-day:last-child{border-bottom:none}
 .sched-chip{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600}
-.chip-A{background:#e3f2fd;color:#1565c0}.chip-B{background:#f3e5f5;color:#6a1b9a}.chip-W{background:#fff3e0;color:#e65100}
+.chip-A{background:#e3f2fd;color:#1565c0}.chip-B{background:#f3e5f5;color:#6a1b9a}.chip-W{background:#fff3e0;color:#e65100}.chip-活{background:#ede7f6;color:#4527a0}
 .chip-leave{background:var(--border);color:#555}
 .grid-wrap{overflow-x:auto}
 .sched-legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:#555}
 .sched-legend .dot{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:4px;vertical-align:-2px}
-.dot-A{background:#bfe0fb}.dot-B{background:#c9f0da}.dot-W{background:#ffdcae}
+.dot-A{background:#bfe0fb}.dot-B{background:#c9f0da}.dot-W{background:#ffdcae}.dot-ev{background:#e6d7f5}
 .pos-ico{font-size:12px}
 .sgrid{display:grid;font-size:11px}
 .sgrid .cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;min-height:34px;padding:2px}
@@ -85,7 +85,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 .sgrid .daycell .w{font-size:9px;color:#999}
 .sgrid .corner{position:sticky;top:0;left:0;z-index:3;background:#fafafa}
 .shift-chip{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px}
-.shift-A{background:#bfe0fb;color:#0d4a84}.shift-B{background:#c9f0da;color:#0d6b3a}.shift-W{background:#ffdcae;color:#8a4a00}
+.shift-A{background:#bfe0fb;color:#0d4a84}.shift-B{background:#c9f0da;color:#0d6b3a}.shift-W{background:#ffdcae;color:#8a4a00}.shift-ev{background:#e6d7f5;color:#5b2a86}
 .leave-chip{font-size:9px;color:#999;background:var(--border);border-radius:5px;padding:1px 4px}
 .leave-chip.req{font-size:12px;font-weight:600;color:#d32f2f}
 .shift-chip{position:relative}
@@ -196,7 +196,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
     <div class="card" style="padding:0;overflow:hidden">
       <div class="sched-legend" style="flex-direction:column;align-items:flex-start;gap:4px">
         <div style="display:flex;flex-wrap:wrap;gap:10px">
-          <span><i class="dot dot-A"></i>10:30–19:00</span><span><i class="dot dot-B"></i>13:00–19:00</span><span><i class="dot dot-W"></i>12:00–18:00</span>
+          <span><i class="dot dot-A"></i>10:30–19:00</span><span><i class="dot dot-B"></i>13:00–19:00</span><span><i class="dot dot-W"></i>12:00–18:00</span><span><i class="dot dot-ev"></i>活動班（時間不固定）</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px">
           <span class="pos-ico">☆領班</span><span class="pos-ico">Θ吧台</span><span class="pos-ico">☺︎外場</span><span class="pos-ico">🍰工作室班</span>
@@ -313,7 +313,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.12.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.14.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -581,7 +581,12 @@ function startClock() {
 }
 
 const LEAVE_NAME = {'休': '休息日', '例': '例假', '特': '特休', '餘': '餘假', '事': '事假', '病': '病假', '生': '生理假', '颱': '颱風假'};
-const SHIFT_NAME = {A: 'A 班', B: 'B 班', W: '工作室班'};
+const SHIFT_NAME = {A: 'A 班', B: 'B 班', W: '工作室班', 活: '活動班'};
+// 班別說明文字：活動班沒有固定上下班時間，其他班別顯示起訖時間與崗位
+function shiftDesc(s) {
+  if (s.shift_code === '活') return SHIFT_NAME['活'] + '（時間不固定，事後補打卡）';
+  return (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+}
 
 async function loadClock() {
   const sched = document.getElementById('schedLine'), st = document.getElementById('clockStatus');
@@ -591,7 +596,7 @@ async function loadClock() {
     const s = r.schedule;
     if (!s) sched.textContent = '今日班表：未排班';
     else if (s.leave_code) sched.textContent = '今日班表：' + (LEAVE_NAME[s.leave_code] || s.leave_code);
-    else sched.textContent = '今日班表：' + (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+    else sched.textContent = '今日班表：' + shiftDesc(s);
 
     if ((r.leaves || []).length) {
       sched.textContent += '　｜　請假：' + r.leaves.map(l => l.type + ' ' + l.start + '–' + l.end).join('、');
@@ -714,7 +719,7 @@ async function renderAtt() {
       }
       let lines = '';
       if (hasShift) {
-        const sh = sd.shift, t = esc(sh.start) + '–' + esc(sh.end) + (sh.position ? ' · ' + esc(sh.position) : '');
+        const sh = sd.shift, t = (sh.code === '活' ? '時間不固定' : esc(sh.start) + '–' + esc(sh.end)) + (sh.position ? ' · ' + esc(sh.position) : '');
         lines += fullLeave
           ? '<div style="font-size:12px;color:#aaa;text-decoration:line-through">原班 ' + esc(sh.label) + ' ' + t + '</div>'
           : '<div style="font-size:13px"><span class="sched-chip chip-' + esc(sh.code) + '">' + esc(sh.label) + '</span> ' + t + '</div>';
@@ -908,7 +913,7 @@ async function renderReview() {
 
 function leaveCard(x) {
   const s = x.schedule;
-  const sched = !s ? '未排班' : (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+  const sched = !s ? '未排班' : shiftDesc(s);
   const id = esc(x.leave_id);
   return '<div class="card">' +
     '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
@@ -925,13 +930,14 @@ function leaveCard(x) {
 function reviewCard(x) {
   const s = x.schedule;
   const sched = !s ? '未排班' : s.leave_code ? (LEAVE_NAME[s.leave_code] || s.leave_code)
-    : (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+    : shiftDesc(s);
   const ps = (x.punches || []).map(p =>
     '<span class="badge ' + (p.type === 'in' ? 'ok' : 'blue') + '">' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</span>').join('');
-  const id = esc(x.request_id);
+  const reqs = (x.requests && x.requests.length) ? x.requests : [{request_id: x.request_id, punch_type: x.punch_type, requested_time: x.requested_time}];
+  const id = esc(reqs.map(r => r.request_id).join(','));
   return '<div class="card">' +
     '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
-    '<div style="font-size:18px;margin:8px 0">補 ' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.requested_time) + '</b></div>' +
+    '<div style="font-size:18px;margin:8px 0">補 ' + reqs.map(r => TYPE_TXT[r.punch_type] + ' <b>' + fmt(r.requested_time) + '</b>').join('　') + '</div>' +
     '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
     '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
     '<div style="font-size:12px;color:#666;margin-top:4px">既有打卡：' + (ps || '<span class="badge gray">無</span>') + '</div>' +
@@ -947,10 +953,10 @@ async function doReview(id, decision) {
     const n = prompt('拒絕原因（員工會收到，可留空）');
     if (n === null) return;
     note = n;
-  } else if (!confirm('確定核准這筆補打卡？')) return;
+  } else if (!confirm(id.indexOf(',') >= 0 ? '確定核准這天的上班與下班補打卡？' : '確定核准這筆補打卡？')) return;
   reviewing = true;
   try {
-    const r = await call('reviewMakeup', {requestId: id, decision, note});
+    const r = await call('reviewMakeup', {requestIds: String(id).split(','), decision, note});
     if (r.error) toast('❌ ' + r.error, 5000);
     else toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工');
   } catch (e) { toast('❌ ' + (e.message || e), 4500); }
@@ -1212,6 +1218,8 @@ async function renderAllSchedule() {
           html += '<div class="cell"><span class="leave-chip' + (c.fromRequest ? ' req' : '') + '">' + esc(c.code) + '</span></div>';
         } else if (c.code === 'W') {
           html += '<div class="cell"><span class="shift-chip shift-W' + (c.partialLeave ? ' part' : '') + '">🍰</span></div>';
+        } else if (c.code === '活') {
+          html += '<div class="cell"><span class="shift-chip shift-ev' + (c.partialLeave ? ' part' : '') + '">活</span></div>';
         } else {
           const ico = c.position ? (POS_ICON[c.position] || '') : '';
           html += '<div class="cell"><span class="shift-chip shift-' + c.code + (c.partialLeave ? ' part' : '') + '">' + ico + '</span></div>';
