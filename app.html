@@ -146,7 +146,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
       <div class="menu-item" onclick="openLeave()"><div class="menu-icon">📝</div><div class="menu-name">申請假期</div><div class="menu-sub">特休/餘假/事假/病假</div></div>
       <div class="menu-item" onclick="openMakeup()"><div class="menu-icon">🔫</div><div class="menu-name">補打卡</div><div class="menu-sub">忘記打卡補申請</div></div>
       <div class="menu-item soon" onclick="soon()"><div class="menu-icon">🎯</div><div class="menu-name">獎金進度</div><div class="menu-sub">即將開放</div></div>
-      <div class="menu-item" onclick="openPayslips()"><div class="menu-icon">💰</div><div class="menu-name">薪資單</div><div class="menu-sub">查看與確認</div></div>
+      <div class="menu-item" onclick="openProfile()"><div class="menu-icon">💰</div><div class="menu-name">薪資休假</div><div class="menu-sub">薪資單、休假統計</div></div>
       <div class="menu-item" id="menuReview" style="display:none" onclick="openReview()"><div class="menu-icon">🗂️</div><div class="menu-name">審核</div><div class="menu-sub">待審核、已審核</div></div>
       <div class="menu-item" id="menuAnomaly" style="display:none" onclick="openAnomalies()"><div class="menu-icon">🔎</div><div class="menu-name">異常清單</div><div class="menu-sub">月底核對</div></div>
     </div>
@@ -280,18 +280,15 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
   </div>
 </div>
 
-<!-- Payslip list -->
+<!-- 薪資休假：基本資料、休假統計、到期處理、薪資單 -->
 <div class="screen" id="sPay">
-  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">薪資單</div></div></div>
-  <div class="content">
-    <div class="card" id="payList"><div style="color:#999;font-size:14px">載入中…</div></div>
-    <div class="hint" style="text-align:center">點選月份查看薪資單明細</div>
-  </div>
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">薪資休假</div></div></div>
+  <div class="content" id="profBody"></div>
 </div>
 
 <!-- Payslip detail -->
 <div class="screen" id="sPaySlip">
-  <div class="header"><div class="header-wrap"><button class="back" onclick="openPayslips()">‹</button><div class="header-title" id="psTitle">薪資單</div></div></div>
+  <div class="header"><div class="header-wrap"><button class="back" onclick="openProfile()">‹</button><div class="header-title" id="psTitle">薪資單</div></div></div>
   <div class="content" id="psBody"></div>
 </div>
 
@@ -313,7 +310,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.14.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.15.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -403,23 +400,135 @@ function mdText(iso) {
   return d.toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric', timeZone: 'Asia/Taipei'});
 }
 
-async function openPayslips() {
+// ─ 薪資休假 ─
+let profData = null, profEmp = null;
+const PROF_TYPES_OPEN = {};
+function hText(min) {
+  const h = Math.round(Number(min) / 60 * 100) / 100;
+  return h + ' 小時';
+}
+function dText(min) {
+  return (Math.round(Number(min) / 480 * 100) / 100) + ' 天';
+}
+function slashDate(s) { return s ? s.replace(/-/g, '/') : ''; }
+
+async function openPayslips() { openProfile(); }   // 舊的入口名稱，保留相容
+
+async function openProfile(empId) {
   show('sPay');
-  const box = document.getElementById('payList');
-  box.innerHTML = '<div style="color:#999;font-size:14px">載入中…</div>';
+  if (empId !== undefined) profEmp = empId;
+  const box = document.getElementById('profBody');
+  box.innerHTML = '<div class="card" style="color:#999;font-size:14px">載入中…</div>';
   try {
-    const r = await payCall('my_payslips');
+    const r = await payCall('my_profile', profEmp ? {employee_id: profEmp} : {});
     if (r.error) throw new Error(r.error);
-    if (!r.rows.length) { box.innerHTML = '<div style="color:#999;font-size:14px">目前還沒有薪資單</div>'; return; }
-    box.innerHTML = r.rows.map(x => {
-      const st = PAY_STATUS[x.status] || [x.status, 'gray'];
-      const extra = x.status === 'confirmed' && x.confirmed_at ? ' ' + mdText(x.confirmed_at) : '';
-      return '<div class="ps-item" onclick="openPayslip(\'' + esc(x.payslip_id) + '\')">' +
-        '<div><div style="font-weight:600">' + esc(monthText(x.month)) + '</div>' +
-        '<span class="badge ' + st[1] + '">' + esc(st[0] + extra) + '</span></div>' +
-        '<div style="font-variant-numeric:tabular-nums">' + (x.status === 'draft' ? '—' : money(x.net)) + ' ›</div></div>';
-    }).join('');
-  } catch (e) { box.innerHTML = '<div style="color:#c62828;font-size:14px">' + esc(e.message || e) + '</div>'; }
+    profData = r;
+    profEmp = r.profile.employee_id;
+    renderProfile();
+  } catch (e) { box.innerHTML = '<div class="card" style="color:#c62828;font-size:14px">' + esc(e.message || e) + '</div>'; }
+}
+
+function toggleLeaveType(t) {
+  PROF_TYPES_OPEN[t] = !PROF_TYPES_OPEN[t];
+  renderProfile();
+}
+
+function renderProfile() {
+  const r = profData, p = r.profile;
+  let html = '';
+  if (r.is_owner && r.staff && r.staff.length) {
+    html += '<div class="card"><label class="label">查看員工（負責人）</label><select class="select" onchange="openProfile(this.value)">' +
+      r.staff.map(s => '<option value="' + esc(s.employee_id) + '"' + (s.employee_id === p.employee_id ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') +
+      '</select></div>';
+  }
+  html += '<div class="card"><div class="ps-h"><span>基本資料</span></div>' +
+    '<div class="stat-row"><span style="color:#666">姓名</span><span>' + esc(p.name) + '</span></div>' +
+    '<div class="stat-row"><span style="color:#666">身分</span><span>' + esc(p.employment_type) + '</span></div>' +
+    '<div class="stat-row"><span style="color:#666">到職日</span><span>' + (p.hire_date ? esc(slashDate(p.hire_date)) : '—') + '</span></div>' +
+    '<div class="stat-row" style="margin-bottom:0"><span style="color:#666">年資</span><span>' + esc(p.seniority) + '</span></div></div>';
+
+  // 休假統計
+  html += '<div class="card"><div class="ps-h"><span>休假統計</span></div>';
+  r.stats.forEach(s => {
+    const has = s.items.length > 0;
+    const open = has && PROF_TYPES_OPEN[s.type];
+    let sub = s.type === '特休' ? '期間 ' + s.range.replace(/-/g, '/') : '';
+    if (s.balances && s.balances.length) {
+      sub = s.balances.map(b => '剩 ' + dText(b.remaining_minutes) + '・' + slashDate(b.expiry) + ' 到期' + (b.deferred ? '（遞延）' : '')).join('<br>') +
+        (s.type === '特休' ? '<br>期間 ' + esc(s.range.replace(/-/g, '/')) : '');
+    }
+    if (s.type === '生理假' && s.count) sub = '今年第 ' + s.count + ' 次（前 3 次不併入病假）';
+    html += '<div class="ps-item" ' + (has ? 'onclick="toggleLeaveType(\'' + s.type + '\')"' : 'style="cursor:default"') + '>' +
+      '<div>' + esc(s.type) + (sub ? '<div class="ps-sub">' + sub + '</div>' : '') + '</div>' +
+      '<div style="white-space:nowrap">已請 ' + hText(s.used_minutes) + (has ? (open ? ' ▾' : ' ▸') : '') + '</div></div>';
+    if (open) {
+      html += '<div style="background:#faf7f5;border-radius:8px;padding:4px 10px;margin:2px 0 8px">' +
+        s.items.map(i => '<div class="stat-row" style="font-size:13px;margin:6px 0"><span>' + esc(i.label) + '</span><span style="color:#666">' + hText(i.minutes) + '</span></div>').join('') + '</div>';
+    }
+    if (s.type === '特休' && r.next_grant) {
+      const y = r.next_grant.years === 0.5 ? '半年' : r.next_grant.years + ' 年';
+      html += '<div style="background:#f6e6df;color:var(--green);border-radius:8px;padding:8px 10px;font-size:13px;margin:4px 0 6px">📅 下次發放：' +
+        esc(slashDate(r.next_grant.date)) + ' 滿 ' + y + '，' + r.next_grant.days + ' 天</div>';
+    }
+  });
+  html += '<div class="hint" style="text-align:center">有請假的假別，點一下可以看日期</div></div>';
+
+  // 到期處理
+  r.expiry_cards.forEach(c => {
+    let inner = '還有 <b>' + esc(c.remaining_days) + '</b>，將於 <b>' + esc(slashDate(c.expiry)) + '</b> 到期。';
+    if (c.approved_cashout) {
+      inner += '<div style="margin-top:8px">✅ 已核准折現，到期時併入 ' + Number(c.expiry.slice(5, 7)) + ' 月薪資（約 ' + money(c.cashout_estimate) + ' 元）</div>';
+    } else if (c.pending) {
+      inner += '<div style="margin-top:8px">⏳ 已選擇「' + esc(c.pending.choice) + '」，等待負責人核准</div>';
+      if (r.is_owner) {
+        inner += '<div class="btn-row"><button class="btn btn-primary" onclick="reviewExpiry(\'' + esc(c.pending.decision_id) + '\',\'approve\')">核准</button>' +
+          '<button class="btn btn-secondary" onclick="reviewExpiry(\'' + esc(c.pending.decision_id) + '\',\'reject\')">退回</button></div>';
+      }
+    } else if (!r.is_owner) {
+      if (c.rejected) inner += '<div style="margin-top:6px;color:#c62828;font-size:13px">上次選擇的「' + esc(c.rejected) + '」未核准，請重新選擇</div>';
+      inner += '<div style="margin-top:6px">沒休完的部分，請選擇：</div><div class="btn-row">' +
+        (c.can_defer ? '<button class="btn btn-primary" onclick="chooseExpiry(\'' + esc(c.balance_id) + '\',\'遞延\')">遞延一年</button>' : '') +
+        '<button class="btn btn-secondary" onclick="chooseExpiry(\'' + esc(c.balance_id) + '\',\'折現\')">折現（約 ' + money(c.cashout_estimate) + ' 元）</button></div>' +
+        '<div class="hint">' + (c.can_defer ? '遞延只能一次；' : '已遞延過一次，到期只能折現；') + '送出後需負責人核准；到期前沒有選擇會折現。</div>';
+    } else {
+      inner += '<div class="hint" style="margin-top:6px">員工還沒選擇；到期前沒有選擇會自動折現（約 ' + money(c.cashout_estimate) + ' 元）。</div>';
+    }
+    html += '<div class="card" style="border:1px solid #f0c9a0"><div class="ps-h"><span>⏰ ' + esc(c.leave_type) + '即將到期</span></div>' +
+      '<div style="font-size:14px;line-height:1.6">' + inner + '</div></div>';
+  });
+
+  // 薪資單
+  html += '<div class="card"><div class="ps-h"><span>薪資單</span></div>';
+  if (!r.payslips || !r.payslips.length) html += '<div style="color:#999;font-size:14px">目前還沒有薪資單</div>';
+  else html += r.payslips.map(x => {
+    const st = PAY_STATUS[x.status] || [x.status, 'gray'];
+    const extra = x.status === 'confirmed' && x.confirmed_at ? ' ' + mdText(x.confirmed_at) : '';
+    return '<div class="ps-item" onclick="openPayslip(\'' + esc(x.payslip_id) + '\')">' +
+      '<div><div style="font-weight:600">' + esc(monthText(x.month)) + '</div>' +
+      '<span class="badge ' + st[1] + '">' + esc(st[0] + extra) + '</span></div>' +
+      '<div style="font-variant-numeric:tabular-nums">' + (x.status === 'draft' ? '—' : money(x.net)) + ' ›</div></div>';
+  }).join('');
+  html += '</div>';
+  document.getElementById('profBody').innerHTML = html;
+}
+
+async function chooseExpiry(balanceId, choice) {
+  if (!confirm('確定選擇「' + choice + '」？送出後需負責人核准。')) return;
+  try {
+    const r = await payCall('my_expiry_choose', {balance_id: balanceId, choice});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已送出，等待負責人核准');
+    openProfile();
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); }
+}
+
+async function reviewExpiry(decisionId, decision) {
+  try {
+    const r = await payCall('owner_expiry_review', {decision_id: decisionId, decision});
+    if (r.error) throw new Error(r.error);
+    toast(decision === 'approve' ? '✅ 已核准' : '↩️ 已退回');
+    openProfile();
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); }
 }
 
 async function openPayslip(id) {
@@ -458,7 +567,7 @@ function renderPayslip() {
     '<div class="card"><div class="ps-h"><span>應發項目</span><span>' + money(s.gross) + '</span></div>' + rows(v.earning, false) + '</div>' +
     '<div class="card"><div class="ps-h"><span>扣除項目</span><span class="ps-minus">−' + money(s.deduction) + '</span></div>' + rows(v.deduction, true) + '</div>' +
     '<div class="hint" style="margin:0 4px 12px">遲到、加班的每日時間，可到「班表與出勤」查看。</div>';
-  if (s.status === 'published' || s.status === 'confirmed') {
+  if ((s.status === 'published' || s.status === 'confirmed') && window.myRole !== '負責人') {
     html += '<div class="btn-row">' +
       (s.status === 'published' ? '<button class="btn btn-primary" id="btnPsOk" onclick="confirmPayslip()">確認無誤</button>' : '') +
       '<button class="btn btn-secondary" onclick="openDispute()">提出異議</button></div>' +
