@@ -61,6 +61,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .input{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--card);color:var(--text);overflow:hidden;text-overflow:ellipsis}
 input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appearance:none;min-width:0;box-sizing:border-box}
 .btn-row{display:flex;gap:8px;margin-top:10px}
+.wcal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.wcal .wh{font-size:11px;color:#999;text-align:center}
+.wcal .wd{aspect-ratio:1;border-radius:8px;background:#f3f3f3;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;cursor:pointer;user-select:none}
+.wcal .wd.we{color:#BE5A34}
+.wcal .wd b{font-size:11px;font-weight:600;margin-top:1px}
+.wcal .wd.t休{background:#8c8c8c;color:#fff}.wcal .wd.t特{background:#BE5A34;color:#fff}.wcal .wd.t餘{background:#d9a441;color:#fff}.wcal .wd.t可{background:#3d9a62;color:#fff}
+.wchips{display:flex;gap:6px;margin-top:8px}
+.wchip{flex:1;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:#fff;text-align:center;font-size:14px;cursor:pointer}
+.wchip.on{border-color:var(--green);background:var(--green);color:#fff}
 .btn-row .btn{margin-top:0;padding:11px;font-size:15px}
 .hint{font-size:12px;color:#999;margin-top:6px}
 .tabs{display:flex;gap:6px;margin-bottom:12px}
@@ -145,6 +154,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
       <div class="menu-item" onclick="openAllSchedule()"><div class="menu-icon">🗓️</div><div class="menu-name">全員班表</div><div class="menu-sub">查看所有人排班</div></div>
       <div class="menu-item" onclick="openLeave()"><div class="menu-icon">📝</div><div class="menu-name">申請假期</div><div class="menu-sub">特休/餘假/事假/病假</div></div>
       <div class="menu-item" onclick="openMakeup()"><div class="menu-icon">🔫</div><div class="menu-name">補打卡</div><div class="menu-sub">忘記打卡補申請</div></div>
+      <div class="menu-item" onclick="openWish()"><div class="menu-icon">🗓️</div><div class="menu-name">劃假</div><div class="menu-sub">下個月休假、可上班日</div></div>
       <div class="menu-item soon" onclick="soon()"><div class="menu-icon">🎯</div><div class="menu-name">獎金進度</div><div class="menu-sub">即將開放</div></div>
       <div class="menu-item" onclick="openProfile()"><div class="menu-icon">💰</div><div class="menu-name">薪資休假</div><div class="menu-sub">薪資單、休假統計</div></div>
       <div class="menu-item" id="menuReview" style="display:none" onclick="openReview()"><div class="menu-icon">🗂️</div><div class="menu-name">審核</div><div class="menu-sub">待審核、已審核</div></div>
@@ -286,6 +296,12 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
   <div class="content" id="profBody"></div>
 </div>
 
+<!-- 劃假 -->
+<div class="screen" id="sWish">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">劃假</div></div></div>
+  <div class="content" id="wishBody"></div>
+</div>
+
 <!-- Payslip detail -->
 <div class="screen" id="sPaySlip">
   <div class="header"><div class="header-wrap"><button class="back" onclick="openProfile()">‹</button><div class="header-title" id="psTitle">薪資單</div></div></div>
@@ -310,7 +326,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.15.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.16.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -1341,6 +1357,108 @@ async function renderAllSchedule() {
 }
 
 init();
+
+// ===== 劃假 =====
+let wishData = null, wishMap = {}, wishPick = '休';
+async function openWish() {
+  show('sWish');
+  const box = document.getElementById('wishBody');
+  box.innerHTML = '<div class="card" style="color:#999">載入中...</div>';
+  try {
+    if (window.myRole === '負責人') return renderWishOverview(await call('wishOverview'));
+    const r = await call('wishGet');
+    if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+    wishData = r; wishMap = {};
+    (r.wishes || []).forEach(w => { wishMap[w.work_date] = w.wish_type; });
+    renderWish();
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+function wishDate(d) { return wishData.month + '-' + String(d).padStart(2, '0'); }
+function wishCal(filter, onTap) {
+  const first = new Date(wishData.month + '-01T12:00:00+08:00').getDay();
+  let h = '<div class="wcal">' + ['日','一','二','三','四','五','六'].map(x => '<div class="wh">' + x + '</div>').join('');
+  for (let i = 0; i < first; i++) h += '<div></div>';
+  for (let d = 1; d <= wishData.days; d++) {
+    const ds = wishDate(d), t = wishMap[ds], dow = (first + d - 1) % 7;
+    const showT = t && filter.indexOf(t) >= 0 ? t : '';
+    h += '<div class="wd' + (dow === 0 || dow === 6 ? ' we' : '') + (showT ? ' t' + showT : '') + '" onclick="' + onTap + '(\'' + ds + '\')">' + d + (showT ? '<b>' + showT + '</b>' : '') + '</div>';
+  }
+  return h + '</div>';
+}
+function wishCount(t) { return Object.values(wishMap).filter(x => x === t).length; }
+function wishBalDays(type) {
+  const m = (wishData.balances || []).filter(b => b.type === type).reduce((a, b) => a + b.remaining_min, 0);
+  return Math.floor(m / 480 * 10) / 10;
+}
+function renderWish() {
+  const r = wishData, box = document.getElementById('wishBody');
+  const mLabel = Number(r.month.slice(5)) + ' 月';
+  const dl = Number(r.deadline.slice(5, 7)) + '/' + Number(r.deadline.slice(8));
+  let h = '<div class="card"><div style="font-weight:600;font-size:16px">' + esc(r.month.slice(0, 4)) + ' 年 ' + mLabel + '劃假</div>' +
+    '<div style="font-size:13px;color:#666;margin-top:4px">' +
+    (r.open ? '開放中，' + dl + ' 23:59 截止，期間內可以重複修改' : r.before ? '每月 15 號開放，' + dl + ' 截止' : '已截止，要調整請聯絡負責人') + '</div>' +
+    (r.submitted_at ? '<div style="font-size:12px;color:#3d9a62;margin-top:4px">✅ 已送出（' + fmtTs(r.submitted_at) + '）</div>' : '<div style="font-size:12px;color:#e65100;margin-top:4px">尚未送出</div>') + '</div>';
+  if (r.employment_type === '正職') {
+    const off = wishCount('休') + wishCount('餘');
+    h += '<div class="card"><div style="font-weight:600">選好假別，再點日期</div>' +
+      '<div class="wchips">' + ['休', '特', '餘'].map(t => '<div class="wchip' + (wishPick === t ? ' on' : '') + '" onclick="wishPick=\'' + t + '\';renderWish()">' + t + '</div>').join('') + '</div>' +
+      wishCal(['休', '特', '餘'], 'wishTapFull') +
+      '<div style="font-size:13px;margin-top:10px;line-height:1.7">休＋餘：<b style="color:' + (off > r.max_off ? '#c62828' : 'inherit') + '">' + off + '</b> / ' + r.max_off + ' 天（第 9 天由電腦排）<br>' +
+      '特休：' + wishCount('特') + ' 天（可用 ' + wishBalDays('特休') + ' 天）<br>餘假：' + wishCount('餘') + ' 天（可用 ' + wishBalDays('餘假') + ' 天）</div>' +
+      '<div style="font-size:12px;color:#999;margin-top:6px">例假、休息日由電腦分配；特休不算在 8 天內。再點一次同一天可以取消。</div></div>';
+  } else {
+    h += '<div class="card"><div style="font-weight:600">🟢 可以上班的日期</div>' + wishCal(['可'], 'wishTapCan') + '</div>' +
+      '<div class="card"><div style="font-weight:600">⚪ 不能上班的日期</div>' +
+      wishCal(['休'], 'wishTapCant') +
+      '<div style="font-size:13px;margin-top:10px">可上班 ' + wishCount('可') + ' 天・不能上班 ' + wishCount('休') + ' 天</div>' +
+      '<div style="font-size:12px;color:#999;margin-top:6px">同一天只能在一個月曆；兩邊都沒點的日子，當作可以上班但優先排有劃「可」的日子。</div></div>';
+  }
+  h += '<button class="btn btn-primary" id="wishBtn" onclick="saveWish()"' + (r.open ? '' : ' disabled') + '>' + (r.submitted_at ? '更新送出' : '送出') + '</button>';
+  box.innerHTML = h;
+}
+function wishToggle(ds, t) { if (wishMap[ds] === t) delete wishMap[ds]; else wishMap[ds] = t; renderWish(); }
+function wishTapFull(ds) { if (!wishData.open) return; wishToggle(ds, wishPick); }
+function wishTapCan(ds) { if (!wishData.open) return; wishToggle(ds, '可'); }
+function wishTapCant(ds) { if (!wishData.open) return; wishToggle(ds, '休'); }
+async function saveWish() {
+  const r = wishData;
+  if (r.employment_type === '正職' && wishCount('休') + wishCount('餘') > r.max_off) { toast('休＋餘最多 ' + r.max_off + ' 天'); return; }
+  const btn = document.getElementById('wishBtn');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const wishes = Object.keys(wishMap).sort().map(d => ({ work_date: d, wish_type: wishMap[d] }));
+    const res = await call('wishSave', { month: r.month, wishes });
+    if (res.error) { toast(res.error, 4000); btn.disabled = false; btn.textContent = '送出'; return; }
+    toast('已送出 ' + res.saved + ' 天');
+    r.submitted_at = res.submitted_at;
+    renderWish();
+  } catch (e) { toast(e.message || e); btn.disabled = false; btn.textContent = '送出'; }
+}
+function fmtTs(iso) {
+  const d = new Date(iso);
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function renderWishOverview(r) {
+  const box = document.getElementById('wishBody');
+  if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+  const done = r.staff.filter(s => s.submitted_at).length;
+  let h = '<div class="card"><div style="font-weight:600;font-size:16px">' + Number(r.month.slice(5)) + ' 月劃假總覽</div>' +
+    '<div style="font-size:13px;color:#666;margin-top:4px">已送出 ' + done + ' / ' + r.staff.length + ' 人</div></div><div class="card">';
+  r.staff.forEach((s, i) => {
+    const cnt = t => s.wishes.filter(w => w.wish_type === t).length;
+    const summary = s.employment_type === '兼職' ? '可 ' + cnt('可') + '・休 ' + cnt('休') : '休 ' + cnt('休') + '・特 ' + cnt('特') + '・餘 ' + cnt('餘');
+    const detail = ['可', '休', '特', '餘'].map(t => {
+      const ds = s.wishes.filter(w => w.wish_type === t).map(w => Number(w.work_date.slice(8)));
+      return ds.length ? t + '：' + ds.join('、') : '';
+    }).filter(Boolean).join('<br>') || '沒有劃';
+    h += '<div class="list-item" style="cursor:pointer" onclick="var e=document.getElementById(\'wd' + i + '\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">' +
+      '<div><div style="font-size:14px;font-weight:500">' + esc(s.name) + ' <span style="font-size:11px;color:#999">' + esc(s.employment_type || '') + '</span></div>' +
+      '<div style="font-size:12px;color:#666">' + summary + '</div></div>' +
+      '<div style="font-size:12px;color:' + (s.submitted_at ? '#3d9a62' : '#e65100') + '">' + (s.submitted_at ? '已送出 ' + fmtTs(s.submitted_at) : '未送出') + '</div></div>' +
+      '<div id="wd' + i + '" style="display:none;font-size:13px;background:#faf7f5;border-radius:8px;padding:8px 10px;margin:4px 0">' + detail + '</div>';
+  });
+  box.innerHTML = h + '</div>';
+}
 </script>
 </body>
 </html>
