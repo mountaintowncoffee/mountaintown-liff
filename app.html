@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!--
+ ===== 版本紀錄（最新在最上面）=====
+ 檔名：app.html　｜　放在 GitHub Pages：mountaintown-liff（畫面左下角的小字就是這裡的版本）
+ v2.17.3  2026-11-11 22:58  加上版本紀錄；兼職本人看到的「事假」在打卡頁、班表與出勤、我的申請都顯示「請假」
+ v2.17.2  2026-11-11 --:--  兼職請假選單只有請假（事假）、生理假、颱風假；兼職不顯示假期餘額；休假統計用後端給的名稱
+ v2.17.1  2026-11-11 --:--  （已被 v2.17.2 取代）兼職選單隱藏病假
+ v2.17.0  2026-11-11 --:--  打卡「取消剛才的打卡」、負責人作廢打卡、補卡衝突勾選作廢後核准、已審核列出作廢的打卡
+ v2.16.0  11/11 以前    劃假頁等（D 對話）
+ 時間為 Claude 交付檔案的台灣時間；「--:--」表示當時沒有記錄時間。
+ ====================================
+-->
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -333,7 +344,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.2</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.3</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
