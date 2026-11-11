@@ -118,6 +118,11 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 .ps-chk input{width:18px;height:18px;margin-top:1px;accent-color:var(--green)}
 .ps-item{padding:12px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
 .ps-item:last-child{border-bottom:none}
+.mini{display:inline-block;margin:4px 6px 0 0;padding:3px 9px;border-radius:99px;border:1px solid #d9b3a3;background:#fff;color:#BE5A34;font-size:11px;cursor:pointer}
+.mini.off{opacity:.55;border-style:dashed;cursor:default;color:#888;border-color:#ccc}
+.conflict{background:#fff8f3;border:1px solid #f1d2c4;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px}
+.conflict label{display:flex;gap:8px;align-items:center;padding:6px 0;font-size:14px}
+.conflict input{width:18px;height:18px;accent-color:var(--green)}
 </style>
 </head>
 <body>
@@ -176,6 +181,8 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
     <div class="loc-status" id="locStatus"></div>
     <button class="btn btn-primary" id="btnIn" onclick="doClock('in')" disabled>上班打卡</button>
     <button class="btn btn-secondary" id="btnOut" onclick="doClock('out')" disabled>下班打卡</button>
+    <button class="btn btn-secondary" id="btnUndo" style="display:none;background:#fff;border:1px dashed #BE5A34;color:#BE5A34" onclick="undoPunch()"></button>
+    <div class="hint" id="undoHint" style="display:none;text-align:center"></div>
   </div>
 </div>
 
@@ -326,7 +333,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.16.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -732,7 +739,32 @@ async function loadClock() {
         + (r.state === 'in' ? '<span class="badge warn">上班中</span>' : '')
       : '<span class="badge gray">今日尚未打卡</span>';
     applyButtons(r.state);
+    showUndo(r.undo);
   } catch (e) { st.innerHTML = '<span class="badge warn">' + esc(e.message || e) + '</span>'; }
+}
+
+// 防誤按：剛打的卡 3 分鐘內可以自己取消（後端也會檢查；超過請用補打卡）
+let undoTimer = null;
+function showUndo(u) {
+  const btn = document.getElementById('btnUndo'), hint = document.getElementById('undoHint');
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  if (!u) { btn.style.display = 'none'; hint.style.display = 'none'; return; }
+  btn.style.display = ''; hint.style.display = '';
+  btn.textContent = '取消剛才的' + (u.type === 'in' ? '上班' : '下班') + '打卡（' + fmt(u.time) + '）';
+  hint.textContent = '誤按的話，3 分鐘內可以自己取消；超過請用「補打卡」申請。';
+  undoTimer = setTimeout(() => { if (document.getElementById('sClock').classList.contains('active')) loadClock(); }, (u.seconds_left + 1) * 1000);   // 時間到，按鈕自動消失
+}
+async function undoPunch() {
+  if (busy) return;
+  if (!confirm('確定要取消剛才的打卡嗎？')) return;
+  busy = true; applyButtons();
+  try {
+    const r = await call('undoLastPunch');
+    if (r.error) toast('❌ ' + r.error, 5000); else toast('已取消剛才的打卡');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  busy = false;
+  await loadClock();
+  applyButtons();
 }
 
 let lastState = null;
@@ -762,7 +794,7 @@ async function doClock(type) {
     const r = await call(type === 'in' ? 'clockIn' : 'clockOut', {lat: pos.coords.latitude, lng: pos.coords.longitude});
     if (r.error) {
       loc.textContent = '❌ ' + r.error;
-      toast('❌ ' + r.error, 4000);
+      toast('❌ ' + r.error, r.code === 'TOO_SOON' ? 7000 : 4000);
     } else {
       loc.textContent = '✅ 打卡地點：' + r.location + '（' + r.distance + ' 公尺）';
       toast(type === 'in' ? '✅ 上班打卡成功！' : '✅ 下班打卡成功！');
@@ -851,6 +883,15 @@ async function renderAtt() {
       }
       if (segs.length) lines += '<div style="font-size:12px;color:#666">打卡 ' +
         segs.map(s => fmt(s.a) + '–' + (s.b ? fmt(s.b) : '未下班')).join('、') + '</div>';
+      // 負責人：每筆打卡旁有「作廢」（誤按等）；補打卡產生的要到「審核 → 已審核」作廢那筆補打卡
+      if (window.myRole === '負責人' && (byDate[d] || []).length) {
+        lines += '<div>' + byDate[d].map(x => {
+          const lab = TYPE_TXT[x.punch_type] + ' ' + fmt(x.punch_time);
+          return x.makeup_request_id
+            ? '<span class="mini off">補卡 ' + esc(lab) + '</span>'
+            : '<button class="mini" onclick="voidPunchBtn(\'' + esc(x.record_id) + '\',\'' + esc(lab) + '\')">作廢 ' + esc(lab) + '</button>';
+        }).join('') + '</div>';
+      }
       lvs.forEach(l => {
         const whole = l.source === 'sheet' || fullLeave;
         lines += '<div style="font-size:12px;color:#d32f2f">' + esc(l.leave_type) + ' ' +
@@ -874,6 +915,20 @@ async function renderAtt() {
     const t = document.getElementById('attToday');
     if (t && attY + '-' + (attM < 10 ? '0' : '') + attM === today.slice(0, 7)) t.scrollIntoView({block: 'center'});
   } catch (e) { if (seq === attSeq) sum.textContent = e.message || e; }
+}
+
+// 負責人作廢單筆打卡（不刪除；員工會收到 LINE 通知）
+async function voidPunchBtn(id, label) {
+  if (reviewing) return;
+  const reason = prompt('作廢「' + label + '」的原因（員工會收到通知，可留空）');
+  if (reason === null) return;
+  reviewing = true;
+  try {
+    const r = await call('voidPunch', {recordId: id, reason});
+    if (r.error) toast('❌ ' + r.error, 5000); else toast('已作廢，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderAtt();
 }
 
 // ─ 角色 ─
@@ -988,7 +1043,9 @@ function doneCard(x) {
     ? (x.source === 'sheet'
         ? '請假　' + esc(x.leave_type) + ' <b>整天</b> <span style="font-size:12px;color:#666">（' + fmtDur(x.minutes) + '）</span>'
         : '請假　' + esc(x.leave_type) + ' <b>' + esc(x.start) + '–' + esc(x.end) + '</b> <span style="font-size:12px;color:#666">（' + fmtDur(x.minutes) + '）</span>')
-    : '補打卡　' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.time) + '</b>';
+    : x.kind === 'punch'
+      ? '打卡　' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.time) + '</b>'
+      : '補打卡　' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.time) + '</b>';
   const note = x.status === 'voided' ? (x.void_reason ? '作廢原因：' + x.void_reason : '') : (x.review_note ? '說明：' + x.review_note : '');
   const fromSheet = x.source === 'sheet';
   const btn = x.status !== 'approved' ? ''
@@ -996,7 +1053,7 @@ function doneCard(x) {
     : '<div class="btn-row"><button class="btn btn-secondary" onclick="voidRecord(\'' + x.kind + '\',\'' + esc(x.id) + '\')">作廢</button></div>';
   return '<div class="card">' +
     '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:15px;font-weight:600">' +
-      esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' + (fromSheet ? '<span class="badge gray">班表同步</span>' : '') + (DONE_TAG[x.status] || '') + '</div>' +
+      esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' + (fromSheet ? '<span class="badge gray">班表同步</span>' : '') + (x.kind === 'punch' && x.self ? '<span class="badge gray">員工自行取消</span>' : '') + (DONE_TAG[x.status] || '') + '</div>' +
     '<div style="font-size:16px;margin:6px 0">' + what + '</div>' +
     (x.reason ? '<div style="font-size:12px;color:#666">原因：' + esc(x.reason) + '</div>' : '') +
     (isLeave && x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:2px">代班人：' + esc(x.covering_name) + '</div>' : '') +
@@ -1060,17 +1117,28 @@ function reviewCard(x) {
     '<span class="badge ' + (p.type === 'in' ? 'ok' : 'blue') + '">' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</span>').join('');
   const reqs = (x.requests && x.requests.length) ? x.requests : [{request_id: x.request_id, punch_type: x.punch_type, requested_time: x.requested_time}];
   const id = esc(reqs.map(r => r.request_id).join(','));
+  // 核准時和既有打卡順序衝突：讓負責人勾選要作廢的既有打卡（補打卡產生的不能在這裡作廢）
+  const vlist = (x.punches || []).filter(p => p.id && !p.byMakeup);
+  const panel = !mkConflict[id] ? '' :
+    '<div class="conflict"><div style="font-weight:600;margin-bottom:4px">⚠️ 和既有打卡的順序衝突</div>' +
+    '<div style="font-size:12px;color:#666;margin-bottom:4px">請勾選要作廢的既有打卡（通常是誤按的那幾筆），作廢後會接著核准這張補卡。作廢的紀錄會保留，可在「已審核」查到。</div>' +
+    (vlist.length
+      ? vlist.map(p => '<label><input type="checkbox" class="cfck" data-card="' + id + '" value="' + esc(p.id) + '"> ' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</label>').join('')
+      : '<div style="font-size:12px;color:#999">這天沒有可以在這裡作廢的既有打卡（可能是補打卡產生的，請先到「已審核」作廢那筆補打卡）</div>') +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReviewReplace(\'' + id + '\')">作廢勾選的打卡並核准</button>' +
+    '<button class="btn btn-secondary" onclick="closeConflict(\'' + id + '\')">取消</button></div></div>';
   return '<div class="card">' +
     '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
     '<div style="font-size:18px;margin:8px 0">補 ' + reqs.map(r => TYPE_TXT[r.punch_type] + ' <b>' + fmt(r.requested_time) + '</b>').join('　') + '</div>' +
     '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
     '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
-    '<div style="font-size:12px;color:#666;margin-top:4px">既有打卡：' + (ps || '<span class="badge gray">無</span>') + '</div>' +
+    '<div style="font-size:12px;color:#666;margin-top:4px">既有打卡：' + (ps || '<span class="badge gray">無</span>') + '</div>' + panel +
     '<div class="btn-row"><button class="btn btn-primary" onclick="doReview(\'' + id + '\',\'approve\')">核准</button>' +
     '<button class="btn btn-secondary" onclick="doReview(\'' + id + '\',\'reject\')">拒絕</button></div></div>';
 }
 
 let reviewing = false;
+const mkConflict = {};      // 哪些補卡卡片要顯示「勾選作廢既有打卡」面板（key = 申請編號，逗號相連）
 async function doReview(id, decision) {
   if (reviewing) return;
   let note = '';
@@ -1082,12 +1150,31 @@ async function doReview(id, decision) {
   reviewing = true;
   try {
     const r = await call('reviewMakeup', {requestIds: String(id).split(','), decision, note});
-    if (r.error) toast('❌ ' + r.error, 5000);
-    else toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工');
+    if (r.error) {
+      if (r.code === 'MAKEUP_CONFLICT') { mkConflict[id] = true; toast('⚠️ 和既有打卡順序衝突，請勾選要作廢的打卡', 5000); }
+      else toast('❌ ' + r.error, 5000);
+    } else { delete mkConflict[id]; toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工'); }
   } catch (e) { toast('❌ ' + (e.message || e), 4500); }
   reviewing = false;
   renderReview();
 }
+
+// 勾選要作廢的既有打卡 → 先作廢、再核准（核准失敗會自動還原）
+async function doReviewReplace(id) {
+  if (reviewing) return;
+  const ids = Array.from(document.querySelectorAll('input.cfck')).filter(c => c.checked && c.dataset.card === id).map(c => c.value);
+  if (!ids.length) { toast('請先勾選要作廢的打卡'); return; }
+  if (!confirm('將作廢勾選的 ' + ids.length + ' 筆既有打卡，接著核准這張補打卡。確定嗎？')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewMakeup', {requestIds: String(id).split(','), decision: 'approve', note: '', voidRecordIds: ids});
+    if (r.error) toast('❌ ' + r.error, 6000);
+    else { delete mkConflict[id]; toast('✅ 已作廢並核准，已通知員工'); }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+function closeConflict(id) { delete mkConflict[id]; renderReview(); }
 
 // ─ 請假（員工）─
 async function openLeave() {
