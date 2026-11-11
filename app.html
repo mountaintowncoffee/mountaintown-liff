@@ -333,7 +333,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.2</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -482,7 +482,7 @@ function renderProfile() {
     }
     if (s.type === '生理假' && s.count) sub = '今年第 ' + s.count + ' 次（前 3 次不併入病假）';
     html += '<div class="ps-item" ' + (has ? 'onclick="toggleLeaveType(\'' + s.type + '\')"' : 'style="cursor:default"') + '>' +
-      '<div>' + esc(s.type) + (sub ? '<div class="ps-sub">' + sub + '</div>' : '') + '</div>' +
+      '<div>' + esc(s.label || s.type) + (sub ? '<div class="ps-sub">' + sub + '</div>' : '') + '</div>' +
       '<div style="white-space:nowrap">已請 ' + hText(s.used_minutes) + (has ? (open ? ' ▾' : ' ▸') : '') + '</div></div>';
     if (open) {
       html += '<div style="background:#faf7f5;border-radius:8px;padding:4px 10px;margin:2px 0 8px">' +
@@ -731,7 +731,7 @@ async function loadClock() {
     else sched.textContent = '今日班表：' + shiftDesc(s);
 
     if ((r.leaves || []).length) {
-      sched.textContent += '　｜　請假：' + r.leaves.map(l => l.type + ' ' + l.start + '–' + l.end).join('、');
+      sched.textContent += '　｜　請假：' + r.leaves.map(l => lvName(l.type) + ' ' + l.start + '–' + l.end).join('、');
     }
     const recs = r.records || [];
     st.innerHTML = recs.length
@@ -894,7 +894,7 @@ async function renderAtt() {
       }
       lvs.forEach(l => {
         const whole = l.source === 'sheet' || fullLeave;
-        lines += '<div style="font-size:12px;color:#d32f2f">' + esc(l.leave_type) + ' ' +
+        lines += '<div style="font-size:12px;color:#d32f2f">' + esc(lvName(l.leave_type)) + ' ' +
           (whole && lvs.length === 1 ? '整天（' + fmtDur(l.leave_minutes) + '）'
             : fmt(l.start_datetime) + '–' + fmt(l.end_datetime) + '（' + fmtDur(l.leave_minutes) + '）') + '</div>';
       });
@@ -1176,11 +1176,19 @@ async function doReviewReplace(id) {
 }
 function closeConflict(id) { delete mkConflict[id]; renderReview(); }
 
+// 兼職自己看到的假別名稱：事假一律叫「請假」（負責人、正職照原本名稱；資料庫仍是事假）
+function lvName(t) { return window.myEmploymentType === '兼職' && t === '事假' ? '請假' : t; }
+
 // ─ 請假（員工）─
 async function openLeave() {
   const sel = document.getElementById('lvType');
-  Array.from(sel.options).forEach(o => { o.hidden = (window.myEmploymentType === '兼職') && (o.value === '餘假' || o.value === '事假' || o.value === '公假'); });
-  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '特休';
+  // 兼職只能請「請假」（記錄為事假）、生理假、颱風假
+  const part = window.myEmploymentType === '兼職';
+  Array.from(sel.options).forEach(o => {
+    o.hidden = part && ['事假', '生理假', '颱風假'].indexOf(o.value) < 0;
+    if (o.value === '事假') o.textContent = part ? '請假' : '事假';
+  });
+  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = part ? '事假' : '特休';
   const today = taipeiToday();
   const d = document.getElementById('lvDate'), e = document.getElementById('lvEnd');
   d.min = addDays(today, -14); d.max = addDays(today, 60);
@@ -1298,13 +1306,14 @@ async function loadMyLeaves() {
   try {
     const r = await call('myLeaves');
     if (r.error) { bal.textContent = r.error; return; }
+    bal.style.display = window.myEmploymentType === '兼職' ? 'none' : '';   // 兼職的特休暫時不在 LIFF 顯示
     bal.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的假期餘額</div>' +
       ((r.balances || []).length
         ? r.balances.map(b => '<div class="stat-row"><span>' + esc(b.type) + '（' + esc(b.expiry) + ' 到期）</span><span class="stat-val">' + fmtDur(b.remaining_min) + '</span></div>').join('')
         : '<div style="color:#999;font-size:13px">尚未設定特休／餘假餘額，需要請特休或餘假請聯絡負責人</div>');
     const rows = (r.items || []).map(x =>
       '<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(x.work_date.slice(5)) +
-      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + esc(x.leave_type) + ' ' + fmt(x.start_datetime) + '–' + fmt(x.end_datetime) +
+      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + esc(lvName(x.leave_type)) + ' ' + fmt(x.start_datetime) + '–' + fmt(x.end_datetime) +
       '（' + fmtDur(x.leave_minutes) + '）</div>' +
       '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') +
       (x.covering_name ? '　代班：' + esc(x.covering_name) : '') +
