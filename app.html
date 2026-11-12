@@ -2,6 +2,7 @@
 <!--
  ===== 版本紀錄（最新在最上面）=====
  檔名：app.html　｜　放在 GitHub Pages：mountaintown-liff（畫面左下角的小字就是這裡的版本）
+ v2.18.0  2026-11-12 18:49  請假表單可填代班時間，各處顯示代班時間；班表與出勤的打卡時數 2027 起扣休息時間
  v2.17.3  2026-11-11 22:58  加上版本紀錄；兼職本人看到的「事假」在打卡頁、班表與出勤、我的申請都顯示「請假」
  v2.17.2  2026-11-11 --:--  兼職請假選單只有請假（事假）、生理假、颱風假；兼職不顯示假期餘額；休假統計用後端給的名稱
  v2.17.1  2026-11-11 --:--  （已被 v2.17.2 取代）兼職選單隱藏病假
@@ -279,7 +280,12 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
         <div class="form-group"><label class="label">請假結束時間</label><div class="time24" data-for="lvTo"></div><input type="hidden" id="lvTo"></div>
       </div>
       <div class="form-group"><label class="label">代班人（選填）</label>
-        <select class="select" id="lvCovering"><option value="">無</option></select></div>
+        <select class="select" id="lvCovering" onchange="toggleCovBox()"><option value="">無</option></select></div>
+      <div id="lvCovBox" style="display:none">
+        <div class="form-group"><label class="label">代班開始時間</label><div class="time24" data-for="lvCovFrom"></div><input type="hidden" id="lvCovFrom"></div>
+        <div class="form-group"><label class="label">代班結束時間</label><div class="time24" data-for="lvCovTo"></div><input type="hidden" id="lvCovTo"></div>
+        <div class="hint" style="margin-top:-4px">代班的同事只代一部分時間時才需要填，例如 13:30–19:00；不填＝代整個請假時段。</div>
+      </div>
       <div class="form-group"><label class="label">原因（選填）</label><input type="text" class="input" id="lvReason" maxlength="200" placeholder="例：看診"></div>
       <button class="btn btn-primary" id="btnLv" onclick="submitLeave()">送出申請</button>
       <div class="hint">只能在有排班的日子請假，沒排班的日子會自動略過。送出後由負責人審核，結果會用 LINE 通知您。特休、餘假的請假時間必須是 30 分鐘的倍數（例如 1 小時、1.5 小時）。</div>
@@ -344,7 +350,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.17.3</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.18.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -874,6 +880,7 @@ async function renderAtt() {
         else if (open) { segs.push({a: open, b: x.punch_time}); h += (new Date(x.punch_time) - new Date(open)) / 36e5; open = null; }
       });
       if (open) segs.push({a: open, b: null});
+      if (d >= WORK_BREAK_FROM && h > 4) h -= 0.5;     // 2027 起：一天打卡超過 4 小時扣 30 分鐘休息（和薪資計算相同）
       total += h;
       const hasShift = !!(sd && sd.shift);
       if (hasShift) shiftDays++;
@@ -921,7 +928,7 @@ async function renderAtt() {
       '<div class="stat-row"><span>出勤天數</span><span class="stat-val">' + Object.keys(byDate).length + ' 天</span></div>' +
       '<div class="stat-row"><span>打卡總時數</span><span class="stat-val">' + total.toFixed(1) + ' h</span></div>' +
       (leaveMin ? '<div class="stat-row"><span>已核准請假時數</span><span class="stat-val">' + fmtDur(leaveMin) + '</span></div>' : '') +
-      '<div style="font-size:11px;color:#999">打卡時數為上下班時間相加，尚未扣除休息時間，實際以薪資單為準</div>';
+      '<div style="font-size:11px;color:#999">' + (attY >= 2027 ? '打卡時數為上下班時間相加，一天超過 4 小時已扣 30 分鐘休息；實際以薪資單為準' : '打卡時數為上下班時間相加（2026 年不扣休息時間），實際以薪資單為準') + '</div>';
     list.innerHTML = rows.length ? rows.join('') : '<div style="text-align:center;color:#999;padding:12px">這個月沒有排班、打卡或請假紀錄</div>';
     const t = document.getElementById('attToday');
     if (t && attY + '-' + (attM < 10 ? '0' : '') + attM === today.slice(0, 7)) t.scrollIntoView({block: 'center'});
@@ -1067,7 +1074,7 @@ function doneCard(x) {
       esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' + (fromSheet ? '<span class="badge gray">班表同步</span>' : '') + (x.kind === 'punch' && x.self ? '<span class="badge gray">員工自行取消</span>' : '') + (DONE_TAG[x.status] || '') + '</div>' +
     '<div style="font-size:16px;margin:6px 0">' + what + '</div>' +
     (x.reason ? '<div style="font-size:12px;color:#666">原因：' + esc(x.reason) + '</div>' : '') +
-    (isLeave && x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:2px">代班人：' + esc(x.covering_name) + '</div>' : '') +
+    (isLeave && x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:2px">代班人：' + covText(x) + '</div>' : '') +
     (isLeave && x.balance_min !== null && x.balance_min !== undefined ? '<div style="font-size:12px;color:#666;margin-top:2px">' + esc(x.name) + ' ' + esc(x.leave_type) + '目前餘額：' + fmtDur(x.balance_min) + '</div>' : '') +
     (note ? '<div style="font-size:12px;color:#888;margin-top:2px">' + esc(note) + '</div>' : '') + btn + '</div>';
 }
@@ -1113,7 +1120,7 @@ function leaveCard(x) {
     '<div style="font-size:18px;margin:8px 0">' + esc(x.leave_type) + ' <b>' + esc(x.start) + '–' + esc(x.end) + '</b> <span style="font-size:13px;color:#666">（' + fmtDur(x.minutes) + '）</span></div>' +
     '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
     '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
-    (x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:4px">代班人：' + esc(x.covering_name) + '</div>' : '') +
+    (x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:4px">代班人：' + covText(x) + '</div>' : '') +
     (x.remaining_min !== null ? '<div style="font-size:12px;color:#666;margin-top:4px">' + esc(x.leave_type) + '目前餘額：' + fmtDur(x.remaining_min) + '</div>' : '') +
     (x.menstrualNote ? '<div style="font-size:12px;color:#e65100;margin-top:4px">⚠️ ' + esc(x.menstrualNote) + '</div>' : '') +
     '<div class="btn-row"><button class="btn btn-primary" onclick="doReviewLeave(\'' + id + '\',\'approve\')">核准</button>' +
@@ -1187,6 +1194,8 @@ async function doReviewReplace(id) {
 }
 function closeConflict(id) { delete mkConflict[id]; renderReview(); }
 
+const WORK_BREAK_FROM = '2027-01-01';   // 2027 起連續工作超過 4 小時扣 30 分鐘休息（和後端 Leave.gs、PayrollAPI.gs 相同）
+
 // 兼職自己看到的假別名稱：事假一律叫「請假」（負責人、正職照原本名稱；資料庫仍是事假）
 function lvName(t) { return window.myEmploymentType === '兼職' && t === '事假' ? '請假' : t; }
 
@@ -1209,6 +1218,7 @@ async function openLeave() {
   onLvTypeChange();
   const cSel = document.getElementById('lvCovering');
   cSel.innerHTML = '<option value="">無</option>';
+  toggleCovBox();
   if (!schedEmpList || !schedEmpList.length) {
     try {
       const r = await call('employeeList');
@@ -1278,6 +1288,15 @@ function fmtDur(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return (h ? h + ' 小時 ' : '') + m + ' 分鐘';
 }
+function toggleCovBox() {
+  const on = !!document.getElementById('lvCovering').value;
+  document.getElementById('lvCovBox').style.display = on ? 'block' : 'none';
+  if (!on) { setTime24('lvCovFrom', ''); setTime24('lvCovTo', ''); }
+}
+// 代班人與代班時間的顯示：「游于融 13:30–19:00」
+function covText(x) {
+  return esc(x.covering_name) + (x.covering_from && x.covering_to ? ' ' + esc(x.covering_from) + '–' + esc(x.covering_to) : '');
+}
 function toggleLvMode() {
   const part = document.getElementById('lvMode').value === 'part';
   document.getElementById('lvTimeBox').style.display = part ? 'block' : 'none';
@@ -1292,12 +1311,14 @@ async function submitLeave() {
   const from = document.getElementById('lvFrom').value, to = document.getElementById('lvTo').value;
   if (!date) { toast('請選擇日期'); return; }
   if (part && (!from || !to)) { toast('請填寫請假的開始與結束時間'); return; }
+  const covFrom = document.getElementById('lvCovFrom').value, covTo = document.getElementById('lvCovTo').value;
+  if (!!covFrom !== !!covTo) { toast('代班時間請填完整的開始與結束，或兩個都不填'); return; }
   const btn = document.getElementById('btnLv');
   btn.disabled = true; btn.textContent = '送出中...';
   try {
     const r = await call('submitLeave', {type, date, full: !part, endDate: part ? '' : endDate, from, to,
       reason: document.getElementById('lvReason').value.trim(),
-      coveringEmployeeId: document.getElementById('lvCovering').value});
+      coveringEmployeeId: document.getElementById('lvCovering').value, coveringFrom: covFrom, coveringTo: covTo});
     if (r.error) toast('❌ ' + r.error, 5000);
     else {
       toast('✅ 已送出 ' + r.count + ' 筆，等待負責人審核' + (r.skipped && r.skipped.length ? '（沒排班已略過：' + r.skipped.join('、') + '）' : '') +
@@ -1305,6 +1326,7 @@ async function submitLeave() {
       document.getElementById('lvReason').value = '';
       document.getElementById('lvEnd').value = '';
       document.getElementById('lvCovering').value = '';
+      toggleCovBox();
       loadMyLeaves();
     }
   } catch (e) { toast('❌ ' + (e.message || e), 4500); }
@@ -1327,7 +1349,7 @@ async function loadMyLeaves() {
       ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + esc(lvName(x.leave_type)) + ' ' + fmt(x.start_datetime) + '–' + fmt(x.end_datetime) +
       '（' + fmtDur(x.leave_minutes) + '）</div>' +
       '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') +
-      (x.covering_name ? '　代班：' + esc(x.covering_name) : '') +
+      (x.covering_name ? '　代班：' + covText(x) : '') +
       (x.menstrualNote ? '</div><div style="font-size:11px;color:#e65100;margin-top:2px">⚠️ ' + esc(x.menstrualNote) : '') + '</div></div>' +
       '<div style="text-align:right">' + (STATUS_TAG[x.status] || '') +
       (x.status === 'pending' ? '<div><button style="margin-top:4px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff" onclick="cancelLeave(\'' + esc(x.leave_id) + '\')">取消</button></div>' : '') +
