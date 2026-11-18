@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<!--
+ ===== 版本紀錄（最新在最上面）=====
+ 檔名：app.html　｜　放在 GitHub Pages：mountaintown-liff（畫面左下角的小字就是這裡的版本）
+ v2.18.2  2026-11-18 23:41  精簡程式（兩個 API 呼叫合併、切換月份共用、刪除未使用的函式與樣式）；註解拿掉員工姓名；功能不變
+ v2.18.1  2026-11-18 23:22  每次打卡都重新定位（不沿用 60 秒內的舊位置）；按下打卡顯示大字狀態、按鈕變「處理中…」；太遠時顯示還差多少公尺
+ v2.18.0  2026-11-12 18:49  請假表單可填代班時間，各處顯示代班時間；班表與出勤的打卡時數 2027 起扣休息時間
+ v2.17.3  2026-11-11 22:58  加上版本紀錄；兼職本人看到的「事假」在打卡頁、班表與出勤、我的申請都顯示「請假」
+ v2.17.2  2026-11-11 --:--  兼職請假選單只有請假（事假）、生理假、颱風假；兼職不顯示假期餘額；休假統計用後端給的名稱
+ v2.17.1  2026-11-11 --:--  （已被 v2.17.2 取代）兼職選單隱藏病假
+ v2.17.0  2026-11-11 --:--  打卡「取消剛才的打卡」、負責人作廢打卡、補卡衝突勾選作廢後核准、已審核列出作廢的打卡
+ v2.16.0  11/11 以前    劃假頁等（D 對話）
+ 時間為 Claude 交付檔案的台灣時間；「--:--」表示當時沒有記錄時間。
+ ====================================
+-->
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>貓燙員工系統</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root {
+  --green:#BE5A34; --bg:#f5f5f5; --card:#fff; --text:#1a1a1a;
+  --sub:#666; --border:#e5e5e5; --r:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+.header{background:var(--green);color:#fff;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+.header-wrap{display:flex;align-items:center;gap:8px}
+.back{background:none;border:none;color:#fff;font-size:26px;cursor:pointer;padding:0;line-height:1}
+.header-title{font-size:18px;font-weight:600}
+.header-sub{font-size:13px;opacity:.85;margin-top:2px}
+.content{flex:1;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.btn{display:block;width:100%;padding:14px;border-radius:var(--r);font-size:16px;font-weight:500;border:none;cursor:pointer;text-align:center;margin-top:8px}
+.btn-primary{background:var(--green);color:#fff}
+.btn-secondary{background:var(--border);color:var(--text)}
+.btn:disabled{opacity:.4}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.menu-item{background:var(--card);border-radius:var(--r);padding:20px 12px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer;border:1px solid var(--border)}
+.menu-item.soon{opacity:.5}
+.menu-icon{font-size:28px;margin-bottom:8px}
+.menu-name{font-size:14px;font-weight:500}
+.menu-sub{font-size:11px;color:var(--sub);margin-top:2px}
+.loading{display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:12px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.form-group{margin-bottom:14px}
+.label{font-size:13px;color:var(--sub);margin-bottom:5px;display:block}
+.select{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:15px;background:var(--card);color:var(--text)}
+.time24 .row{display:flex;gap:8px;align-items:center}
+.time24 .select{flex:1;min-width:0}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:500;margin:2px 1px}
+.ok{background:#e6f7ed;color:#0a7a41}
+.warn{background:#fff3e0;color:#e65100}
+.blue{background:#e3f2fd;color:#1565c0}
+.gray{background:var(--border);color:var(--sub)}
+.list-item{padding:11px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.list-item:last-child{border-bottom:none}
+.clock-display{font-size:52px;font-weight:200;text-align:center;margin:12px 0 4px;font-variant-numeric:tabular-nums}
+.clock-date{text-align:center;color:var(--sub);font-size:14px;margin-bottom:14px}
+.stat-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px}
+.stat-val{font-weight:600}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+.loc-status{font-size:13px;color:var(--sub);margin-bottom:12px;min-height:20px;text-align:center}
+.loc-status.big{white-space:pre-line;font-size:17px;font-weight:600;color:var(--text);background:#fff8f3;border:1px solid #f1d2c4;border-radius:10px;padding:10px 12px}
+.loc-status.big.err{color:#c62828;background:#fdecea;border-color:#f5c2c0}
+.loc-status.big.ok{color:#2e7d32;background:#edf7ee;border-color:#c8e6c9}
+.month-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.month-nav button{background:var(--card);border:1px solid var(--border);border-radius:8px;width:44px;height:36px;font-size:18px;cursor:pointer}
+.input{width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-size:16px;background:var(--card);color:var(--text);overflow:hidden;text-overflow:ellipsis}
+input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appearance:none;min-width:0;box-sizing:border-box}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.wcal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.wcal .wh{font-size:11px;color:#999;text-align:center}
+.wcal .wd{aspect-ratio:1;border-radius:8px;background:#f3f3f3;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;cursor:pointer;user-select:none}
+.wcal .wd.we{color:#BE5A34}
+.wcal .wd b{font-size:11px;font-weight:600;margin-top:1px}
+.wcal .wd.t休{background:#8c8c8c;color:#fff}.wcal .wd.t特{background:#BE5A34;color:#fff}.wcal .wd.t餘{background:#d9a441;color:#fff}.wcal .wd.t可{background:#3d9a62;color:#fff}
+.wchips{display:flex;gap:6px;margin-top:8px}
+.wchip{flex:1;padding:8px 0;border-radius:8px;border:1px solid var(--border);background:#fff;text-align:center;font-size:14px;cursor:pointer}
+.wchip.on{border-color:var(--green);background:var(--green);color:#fff}
+.btn-row .btn{margin-top:0;padding:11px;font-size:15px}
+.hint{font-size:12px;color:#999;margin-top:6px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tab{flex:1;text-align:center;padding:9px;border-radius:8px;background:var(--card);border:1px solid var(--border);font-size:14px;cursor:pointer}
+.tab.active{background:var(--green);color:#fff;border-color:var(--green)}
+.sched-chip{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600}
+.chip-A{background:#e3f2fd;color:#1565c0}.chip-B{background:#f3e5f5;color:#6a1b9a}.chip-W{background:#fff3e0;color:#e65100}.chip-活{background:#ede7f6;color:#4527a0}
+.chip-leave{background:var(--border);color:#555}
+.grid-wrap{overflow-x:auto}
+.sched-legend{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:#555}
+.sched-legend .dot{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:4px;vertical-align:-2px}
+.dot-A{background:#bfe0fb}.dot-B{background:#c9f0da}.dot-W{background:#ffdcae}.dot-ev{background:#e6d7f5}
+.pos-ico{font-size:12px}
+.sgrid{display:grid;font-size:11px}
+.sgrid .cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;min-height:34px;padding:2px}
+.sgrid .hcell{position:sticky;top:0;background:#fafafa;z-index:2;flex-direction:column;font-weight:600;padding:6px 2px;line-height:1.3;min-height:48px}
+.sgrid .hcell span{display:block}
+.sgrid .daycell{position:sticky;left:0;background:#fff;z-index:1;flex-direction:column;min-width:34px}
+.sgrid .daycell .d{font-weight:600;font-size:12px}
+.sgrid .daycell .w{font-size:9px;color:#999}
+.sgrid .corner{position:sticky;top:0;left:0;z-index:3;background:#fafafa}
+.shift-chip{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.shift-A{background:#bfe0fb;color:#0d4a84}.shift-B{background:#c9f0da;color:#0d6b3a}.shift-W{background:#ffdcae;color:#8a4a00}.shift-ev{background:#e6d7f5;color:#5b2a86}
+.leave-chip{font-size:9px;color:#999;background:var(--border);border-radius:5px;padding:1px 4px}
+.leave-chip.req{font-size:12px;font-weight:600;color:#d32f2f}
+.shift-chip{position:relative}
+.shift-chip.part::after{content:'';position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#d32f2f;border:1px solid #fff}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:14px;cursor:pointer}
+.tabs button.on{background:var(--green);color:#fff;border-color:var(--green);font-weight:600}
+.an-item{padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.an-item:last-child{border-bottom:none}
+.an-item .who{font-weight:600}
+.an-item .txt{color:#555;margin-top:2px;font-size:12px}
+.ps-net{font-size:30px;font-weight:700;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.ps-tot{display:flex;justify-content:space-between;font-size:14px;color:var(--sub)}
+.ps-h{display:flex;justify-content:space-between;font-weight:600;font-size:15px;margin-bottom:4px}
+.ps-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+.ps-row:last-child{border-bottom:none}
+.ps-row .r{white-space:nowrap;font-variant-numeric:tabular-nums}
+.ps-sub{font-size:12px;color:var(--sub);margin-top:2px}
+.ps-minus{color:#c62828}
+.ps-chk{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.ps-chk input{width:18px;height:18px;margin-top:1px;accent-color:var(--green)}
+.ps-item{padding:12px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.ps-item:last-child{border-bottom:none}
+.mini{display:inline-block;margin:4px 6px 0 0;padding:3px 9px;border-radius:99px;border:1px solid #d9b3a3;background:#fff;color:#BE5A34;font-size:11px;cursor:pointer}
+.mini.off{opacity:.55;border-style:dashed;cursor:default;color:#888;border-color:#ccc}
+.conflict{background:#fff8f3;border:1px solid #f1d2c4;border-radius:10px;padding:10px 12px;margin-top:8px;font-size:13px}
+.conflict label{display:flex;gap:8px;align-items:center;padding:6px 0;font-size:14px}
+.conflict input{width:18px;height:18px;accent-color:var(--green)}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading" id="sLoading">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:#666">載入中...</div>
+  <div id="loadStep" style="font-size:12px;color:#999;margin-top:6px"></div>
+</div>
+
+<!-- Bind -->
+<div class="screen" id="sBind">
+  <div class="header"><div class="header-title">貓燙員工系統</div><div class="header-sub">首次使用請選擇您的姓名</div></div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group">
+        <label class="label">選擇您的姓名</label>
+        <select class="select" id="bindSel"><option value="">請選擇...</option></select>
+      </div>
+      <button class="btn btn-primary" id="btnBind" onclick="bindAccount()">確認綁定</button>
+    </div>
+    <div style="font-size:12px;color:#999;text-align:center;margin-top:8px">每個 LINE 帳號只能綁定一位員工，綁定後無法自行更改</div>
+  </div>
+</div>
+
+<!-- Menu -->
+<div class="screen" id="sMenu">
+  <div class="header"><div class="header-title">貓燙員工系統</div><div class="header-sub" id="welcome">歡迎回來</div></div>
+  <div class="content">
+    <div class="menu-grid">
+      <div class="menu-item" onclick="show('sClock')"><div class="menu-icon">✔️</div><div class="menu-name">打卡</div><div class="menu-sub">上班 / 下班</div></div>
+      <div class="menu-item" onclick="loadAttendance()"><div class="menu-icon">📋</div><div class="menu-name">班表與出勤</div><div class="menu-sub">排班、打卡、請假</div></div>
+      <div class="menu-item" onclick="openAllSchedule()"><div class="menu-icon">🗓️</div><div class="menu-name">全員班表</div><div class="menu-sub">查看所有人排班</div></div>
+      <div class="menu-item" onclick="openLeave()"><div class="menu-icon">📝</div><div class="menu-name">申請假期</div><div class="menu-sub">特休/餘假/事假/病假</div></div>
+      <div class="menu-item" onclick="openMakeup()"><div class="menu-icon">🔫</div><div class="menu-name">補打卡</div><div class="menu-sub">忘記打卡補申請</div></div>
+      <div class="menu-item" onclick="openWish()"><div class="menu-icon">🗓️</div><div class="menu-name">劃假</div><div class="menu-sub">下個月休假、可上班日</div></div>
+      <div class="menu-item soon" onclick="soon()"><div class="menu-icon">🎯</div><div class="menu-name">獎金進度</div><div class="menu-sub">即將開放</div></div>
+      <div class="menu-item" onclick="openProfile()"><div class="menu-icon">💰</div><div class="menu-name">薪資休假</div><div class="menu-sub">薪資單、休假統計</div></div>
+      <div class="menu-item" id="menuReview" style="display:none" onclick="openReview()"><div class="menu-icon">🗂️</div><div class="menu-name">審核</div><div class="menu-sub">待審核、已審核</div></div>
+      <div class="menu-item" id="menuAnomaly" style="display:none" onclick="openAnomalies()"><div class="menu-icon">🔎</div><div class="menu-name">異常清單</div><div class="menu-sub">月底核對</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Clock -->
+<div class="screen" id="sClock">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">打卡</div></div></div>
+  <div class="content">
+    <div class="card" style="text-align:center">
+      <div class="clock-display" id="clockTime">--:--:--</div>
+      <div class="clock-date" id="clockDate"></div>
+      <div id="schedLine" style="font-size:14px;margin-bottom:10px;color:var(--sub)"></div>
+      <div id="clockStatus" style="font-size:14px"></div>
+    </div>
+    <div class="loc-status" id="locStatus"></div>
+    <button class="btn btn-primary" id="btnIn" onclick="doClock('in')" disabled>上班打卡</button>
+    <button class="btn btn-secondary" id="btnOut" onclick="doClock('out')" disabled>下班打卡</button>
+    <button class="btn btn-secondary" id="btnUndo" style="display:none;background:#fff;border:1px dashed #BE5A34;color:#BE5A34" onclick="undoPunch()"></button>
+    <div class="hint" id="undoHint" style="display:none;text-align:center"></div>
+  </div>
+</div>
+
+<!-- Attendance -->
+<div class="screen" id="sAtt">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">班表與出勤</div></div></div>
+  <div class="content">
+    <div class="form-group" id="attWhoBox" style="display:none"><select class="select" id="attWho" onchange="renderAtt()"></select></div>
+    <div class="month-nav">
+      <button onclick="shiftMonth(-1)">‹</button>
+      <div id="attMonth" style="font-weight:600"></div>
+      <button onclick="shiftMonth(1)">›</button>
+    </div>
+    <div id="attSummary" class="card"></div>
+    <div id="attList" class="card"></div>
+  </div>
+</div>
+
+<!-- All-staff schedule -->
+<div class="screen" id="sAllSched">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">全員班表</div></div></div>
+  <div class="content">
+    <div class="month-nav">
+      <button onclick="shiftAllMonth(-1)">‹</button>
+      <div id="allSchedMonth" style="font-weight:600"></div>
+      <button onclick="shiftAllMonth(1)">›</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="sched-legend" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <span><i class="dot dot-A"></i>10:30–19:00</span><span><i class="dot dot-B"></i>13:00–19:00</span><span><i class="dot dot-W"></i>12:00–18:00</span><span><i class="dot dot-ev"></i>活動班（時間不固定）</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <span class="pos-ico">☆領班</span><span class="pos-ico">Θ吧台</span><span class="pos-ico">☺︎外場</span><span class="pos-ico">🍰工作室班</span>
+        </div>
+      </div>
+      <div class="grid-wrap"><div id="allSchedGrid"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Makeup -->
+<div class="screen" id="sMakeup">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">補打卡申請</div></div></div>
+  <div class="content">
+    <div class="card">
+      <div class="form-group"><label class="label">日期（可補 14 天內）</label><input type="date" class="input" id="mkDate"></div>
+      <div class="form-group"><label class="label">補打上班時間（如有）</label><div class="time24" data-for="mkIn"></div><input type="hidden" id="mkIn"></div>
+      <div class="form-group"><label class="label">補打下班時間（如有）</label><div class="time24" data-for="mkOut"></div><input type="hidden" id="mkOut"></div>
+      <div class="form-group"><label class="label">原因（必填）</label><input type="text" class="input" id="mkReason" maxlength="200" placeholder="例：忘記打下班卡"></div>
+      <button class="btn btn-primary" id="btnMk" onclick="submitMakeup()">送出申請</button>
+      <div class="hint">送出後由負責人審核，核准或拒絕都會用 LINE 通知您。</div>
+    </div>
+    <div class="card" id="mkList"></div>
+  </div>
+</div>
+
+<!-- Leave -->
+<div class="screen" id="sLeave">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">申請假期</div></div></div>
+  <div class="content">
+    <div class="card" id="lvBal"></div>
+    <div class="card">
+      <div class="form-group"><label class="label">假別</label>
+        <select class="select" id="lvType" onchange="onLvTypeChange()">
+          <option value="特休">特休</option>
+          <option value="餘假">餘假</option>
+          <option value="事假">事假</option>
+          <option value="病假">病假</option>
+          <option value="生理假">生理假</option>
+          <option value="颱風假">颱風假</option>
+          <option value="公假">公假</option>
+        </select></div>
+      <div class="form-group"><label class="label">整天或部分時段</label>
+        <select class="select" id="lvMode" onchange="toggleLvMode()">
+          <option value="full">整天（可連續多天）</option>
+          <option value="part">部分時段</option>
+        </select></div>
+      <div class="form-group"><label class="label">日期</label><input type="date" class="input" id="lvDate"></div>
+      <div class="form-group" id="lvEndBox"><label class="label">結束日期（連續請假才需要，單日免填）</label><input type="date" class="input" id="lvEnd"></div>
+      <div id="lvTimeBox" style="display:none">
+        <div class="form-group"><label class="label">請假開始時間</label><div class="time24" data-for="lvFrom"></div><input type="hidden" id="lvFrom"></div>
+        <div class="form-group"><label class="label">請假結束時間</label><div class="time24" data-for="lvTo"></div><input type="hidden" id="lvTo"></div>
+      </div>
+      <div class="form-group"><label class="label">代班人（選填）</label>
+        <select class="select" id="lvCovering" onchange="toggleCovBox()"><option value="">無</option></select></div>
+      <div id="lvCovBox" style="display:none">
+        <div class="form-group"><label class="label">代班開始時間</label><div class="time24" data-for="lvCovFrom"></div><input type="hidden" id="lvCovFrom"></div>
+        <div class="form-group"><label class="label">代班結束時間</label><div class="time24" data-for="lvCovTo"></div><input type="hidden" id="lvCovTo"></div>
+        <div class="hint" style="margin-top:-4px">代班的同事只代一部分時間時才需要填，例如 13:30–19:00；不填＝代整個請假時段。</div>
+      </div>
+      <div class="form-group"><label class="label">原因（選填）</label><input type="text" class="input" id="lvReason" maxlength="200" placeholder="例：看診"></div>
+      <button class="btn btn-primary" id="btnLv" onclick="submitLeave()">送出申請</button>
+      <div class="hint">只能在有排班的日子請假，沒排班的日子會自動略過。送出後由負責人審核，結果會用 LINE 通知您。特休、餘假的請假時間必須是 30 分鐘的倍數（例如 1 小時、1.5 小時）。</div>
+    </div>
+    <div class="card" id="lvList"></div>
+  </div>
+</div>
+
+<!-- Review (owner) -->
+<div class="screen" id="sReview">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">審核</div></div></div>
+  <div class="content">
+    <div class="tabs"><button id="rvTabP" class="on" onclick="setRvTab('pending')">待審核</button><button id="rvTabD" onclick="setRvTab('done')">已審核</button></div>
+    <div class="month-nav" id="rvMonthNav" style="display:none"><button onclick="shiftRvMonth(-1)">‹</button><div id="rvMonth" style="font-weight:600"></div><button onclick="shiftRvMonth(1)">›</button></div>
+    <div id="reviewList"></div>
+  </div>
+</div>
+
+<!-- Anomalies (owner) -->
+<div class="screen" id="sAnom">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">異常清單</div></div></div>
+  <div class="content">
+    <div class="month-nav"><button onclick="shiftAnomMonth(-1)">‹</button><div id="anMonth" style="font-weight:600"></div><button onclick="shiftAnomMonth(1)">›</button></div>
+    <div id="anSummary" class="card"></div>
+    <div id="anList"></div>
+  </div>
+</div>
+
+<!-- 薪資休假：基本資料、休假統計、到期處理、薪資單 -->
+<div class="screen" id="sPay">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">薪資休假</div></div></div>
+  <div class="content" id="profBody"></div>
+</div>
+
+<!-- 劃假 -->
+<div class="screen" id="sWish">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sMenu')">‹</button><div class="header-title">劃假</div></div></div>
+  <div class="content" id="wishBody"></div>
+</div>
+
+<!-- Payslip detail -->
+<div class="screen" id="sPaySlip">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="openProfile()">‹</button><div class="header-title" id="psTitle">薪資單</div></div></div>
+  <div class="content" id="psBody"></div>
+</div>
+
+<!-- Dispute -->
+<div class="screen" id="sPayDispute">
+  <div class="header"><div class="header-wrap"><button class="back" onclick="show('sPaySlip')">‹</button><div class="header-title">提出異議</div></div></div>
+  <div class="content">
+    <div class="card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:4px">哪些項目有問題？（可複選）</div>
+      <div id="dpItems"></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">異議內容（必填）</div>
+      <textarea class="input" id="dpContent" rows="4" maxlength="500" style="resize:vertical;font-family:inherit" placeholder="請說明哪裡不對，例如日期、時間、原因"></textarea>
+    </div>
+    <button class="btn btn-primary" id="btnDp" onclick="submitDispute()">送出異議</button>
+    <div class="hint" style="text-align:center;margin-top:10px">送出後負責人會收到通知，更正後的薪資單會再請你確認一次</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.18.2</div>
+
+<script>
+const LIFF_ID = '2011700774-SyRPvpY4';
+// ↓↓↓ 部署新的 Apps Script 後，把「網路應用程式」網址貼在這裡 ↓↓↓
+const API = 'https://script.google.com/macros/s/AKfycbxZH5DNK9AuH2HQNCY4PHAgPvqcH6NPimmIzI5Vad1lljNp6458cVaPKpPqz_8m4ynKNQ/exec';
+
+// 薪資單由獨立的「貓燙 Payroll API」提供（PayrollAPI.gs），和打卡的 API 分開
+const PAY_API = 'https://script.google.com/macros/s/AKfycbzORjzw_iG3Ah7zVv5rx2B67kzO48lB7glFkOdhwbcUzKmaJ6dugFJRHHVrhCMBi3pg/exec';
+
+let clockTimer = null, busy = false, attY = 0, attM = 0;
+
+// ─ 工具 ─
+function toast(msg, ms = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function soon() { toast('這個功能即將開放'); }
+function show(id) {
+  document.getElementById('sLoading').style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+  if (id === 'sClock') startClock();
+}
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Taipei'});
+}
+function taipeiToday() { return new Date().toLocaleDateString('sv-SE', {timeZone: 'Asia/Taipei'}); }
+
+// 所有請求：附上 LIFF access token，由後端向 LINE 驗證身分（LIFF API 與薪資 API 共用）
+async function apiPost(url, action, data = {}) {
+  const token = liff.getAccessToken();
+  if (!token) { liff.login(); throw new Error('登入中，請稍候...'); }
+  let res;
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 40000);
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=UTF-8'},   // 避免 CORS preflight
+      body: JSON.stringify({action, accessToken: token, ...data}),
+      signal: ctl.signal
+    });
+  } catch (e) {
+    throw new Error(e && e.name === 'AbortError' ? '伺服器回應太慢（超過 40 秒），請稍後再試' : '連線失敗，請檢查網路後再試');
+  } finally { clearTimeout(tm); }
+  const r = await res.json();
+  if (r.code === 'AUTH') { toast('登入已過期，重新登入中...'); setTimeout(() => { liff.logout(); liff.login(); }, 1200); }
+  return r;
+}
+const call = (action, data) => apiPost(API, action, data);          // LIFF API
+const payCall = (action, data) => apiPost(PAY_API, action, data);   // 薪資 API
+
+// ─ 薪資單 ─
+let paySlip = null, payView = null;
+const PAY_STATUS = {
+  published: ['待確認', 'warn'], confirmed: ['已確認', 'ok'], auto_confirmed: ['視同同意', 'gray'],
+  disputed: ['有異議・負責人處理中', 'blue'], draft: ['負責人更正中', 'blue']
+};
+function money(n) { return Number(n || 0).toLocaleString('zh-TW'); }
+function monthText(ym) { return ym.slice(0, 4) + ' 年 ' + Number(ym.slice(5, 7)) + ' 月'; }
+function mdText(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('zh-TW', {month: 'numeric', day: 'numeric', timeZone: 'Asia/Taipei'});
+}
+
+// ─ 薪資休假 ─
+let profData = null, profEmp = null;
+const PROF_TYPES_OPEN = {};
+function hText(min) {
+  const h = Math.round(Number(min) / 60 * 100) / 100;
+  return h + ' 小時';
+}
+function dText(min) {
+  return (Math.round(Number(min) / 480 * 100) / 100) + ' 天';
+}
+function slashDate(s) { return s ? s.replace(/-/g, '/') : ''; }
+
+
+async function openProfile(empId) {
+  show('sPay');
+  if (empId !== undefined) profEmp = empId;
+  const box = document.getElementById('profBody');
+  box.innerHTML = '<div class="card" style="color:#999;font-size:14px">載入中…</div>';
+  try {
+    const r = await payCall('my_profile', profEmp ? {employee_id: profEmp} : {});
+    if (r.error) throw new Error(r.error);
+    profData = r;
+    profEmp = r.profile.employee_id;
+    renderProfile();
+  } catch (e) { box.innerHTML = '<div class="card" style="color:#c62828;font-size:14px">' + esc(e.message || e) + '</div>'; }
+}
+
+function toggleLeaveType(t) {
+  PROF_TYPES_OPEN[t] = !PROF_TYPES_OPEN[t];
+  renderProfile();
+}
+
+function renderProfile() {
+  const r = profData, p = r.profile;
+  let html = '';
+  if (r.is_owner && r.staff && r.staff.length) {
+    html += '<div class="card"><label class="label">查看員工（負責人）</label><select class="select" onchange="openProfile(this.value)">' +
+      r.staff.map(s => '<option value="' + esc(s.employee_id) + '"' + (s.employee_id === p.employee_id ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') +
+      '</select></div>';
+  }
+  html += '<div class="card"><div class="ps-h"><span>基本資料</span></div>' +
+    '<div class="stat-row"><span style="color:#666">姓名</span><span>' + esc(p.name) + '</span></div>' +
+    '<div class="stat-row"><span style="color:#666">身分</span><span>' + esc(p.employment_type) + '</span></div>' +
+    '<div class="stat-row"><span style="color:#666">到職日</span><span>' + (p.hire_date ? esc(slashDate(p.hire_date)) : '—') + '</span></div>' +
+    '<div class="stat-row" style="margin-bottom:0"><span style="color:#666">年資</span><span>' + esc(p.seniority) + '</span></div></div>';
+
+  // 休假統計
+  html += '<div class="card"><div class="ps-h"><span>休假統計</span></div>';
+  r.stats.forEach(s => {
+    const has = s.items.length > 0;
+    const open = has && PROF_TYPES_OPEN[s.type];
+    let sub = s.type === '特休' ? '期間 ' + s.range.replace(/-/g, '/') : '';
+    if (s.balances && s.balances.length) {
+      sub = s.balances.map(b => '剩 ' + dText(b.remaining_minutes) + '・' + slashDate(b.expiry) + ' 到期' + (b.deferred ? '（遞延）' : '')).join('<br>') +
+        (s.type === '特休' ? '<br>期間 ' + esc(s.range.replace(/-/g, '/')) : '');
+    }
+    if (s.type === '生理假' && s.count) sub = '今年第 ' + s.count + ' 次（前 3 次不併入病假）';
+    html += '<div class="ps-item" ' + (has ? 'onclick="toggleLeaveType(\'' + s.type + '\')"' : 'style="cursor:default"') + '>' +
+      '<div>' + esc(s.label || s.type) + (sub ? '<div class="ps-sub">' + sub + '</div>' : '') + '</div>' +
+      '<div style="white-space:nowrap">已請 ' + hText(s.used_minutes) + (has ? (open ? ' ▾' : ' ▸') : '') + '</div></div>';
+    if (open) {
+      html += '<div style="background:#faf7f5;border-radius:8px;padding:4px 10px;margin:2px 0 8px">' +
+        s.items.map(i => '<div class="stat-row" style="font-size:13px;margin:6px 0"><span>' + esc(i.label) + '</span><span style="color:#666">' + hText(i.minutes) + '</span></div>').join('') + '</div>';
+    }
+    if (s.type === '特休' && r.next_grant) {
+      const y = r.next_grant.years === 0.5 ? '半年' : r.next_grant.years + ' 年';
+      html += '<div style="background:#f6e6df;color:var(--green);border-radius:8px;padding:8px 10px;font-size:13px;margin:4px 0 6px">📅 下次發放：' +
+        esc(slashDate(r.next_grant.date)) + ' 滿 ' + y + '，' + r.next_grant.days + ' 天</div>';
+    }
+  });
+  html += '<div class="hint" style="text-align:center">有請假的假別，點一下可以看日期</div></div>';
+
+  // 到期處理
+  r.expiry_cards.forEach(c => {
+    let inner = '還有 <b>' + esc(c.remaining_days) + '</b>，將於 <b>' + esc(slashDate(c.expiry)) + '</b> 到期。';
+    if (c.approved_cashout) {
+      inner += '<div style="margin-top:8px">✅ 已核准折現，到期時併入 ' + Number(c.expiry.slice(5, 7)) + ' 月薪資（約 ' + money(c.cashout_estimate) + ' 元）</div>';
+    } else if (c.pending) {
+      inner += '<div style="margin-top:8px">⏳ 已選擇「' + esc(c.pending.choice) + '」，等待負責人核准</div>';
+      if (r.is_owner) {
+        inner += '<div class="btn-row"><button class="btn btn-primary" onclick="reviewExpiry(\'' + esc(c.pending.decision_id) + '\',\'approve\')">核准</button>' +
+          '<button class="btn btn-secondary" onclick="reviewExpiry(\'' + esc(c.pending.decision_id) + '\',\'reject\')">退回</button></div>';
+      }
+    } else if (!r.is_owner) {
+      if (c.rejected) inner += '<div style="margin-top:6px;color:#c62828;font-size:13px">上次選擇的「' + esc(c.rejected) + '」未核准，請重新選擇</div>';
+      inner += '<div style="margin-top:6px">沒休完的部分，請選擇：</div><div class="btn-row">' +
+        (c.can_defer ? '<button class="btn btn-primary" onclick="chooseExpiry(\'' + esc(c.balance_id) + '\',\'遞延\')">遞延一年</button>' : '') +
+        '<button class="btn btn-secondary" onclick="chooseExpiry(\'' + esc(c.balance_id) + '\',\'折現\')">折現（約 ' + money(c.cashout_estimate) + ' 元）</button></div>' +
+        '<div class="hint">' + (c.can_defer ? '遞延只能一次；' : '已遞延過一次，到期只能折現；') + '送出後需負責人核准；到期前沒有選擇會折現。</div>';
+    } else {
+      inner += '<div class="hint" style="margin-top:6px">員工還沒選擇；到期前沒有選擇會自動折現（約 ' + money(c.cashout_estimate) + ' 元）。</div>';
+    }
+    html += '<div class="card" style="border:1px solid #f0c9a0"><div class="ps-h"><span>⏰ ' + esc(c.leave_type) + '即將到期</span></div>' +
+      '<div style="font-size:14px;line-height:1.6">' + inner + '</div></div>';
+  });
+
+  // 薪資單
+  html += '<div class="card"><div class="ps-h"><span>薪資單</span></div>';
+  if (!r.payslips || !r.payslips.length) html += '<div style="color:#999;font-size:14px">目前還沒有薪資單</div>';
+  else html += r.payslips.map(x => {
+    const st = PAY_STATUS[x.status] || [x.status, 'gray'];
+    const extra = x.status === 'confirmed' && x.confirmed_at ? ' ' + mdText(x.confirmed_at) : '';
+    return '<div class="ps-item" onclick="openPayslip(\'' + esc(x.payslip_id) + '\')">' +
+      '<div><div style="font-weight:600">' + esc(monthText(x.month)) + '</div>' +
+      '<span class="badge ' + st[1] + '">' + esc(st[0] + extra) + '</span></div>' +
+      '<div style="font-variant-numeric:tabular-nums">' + (x.status === 'draft' ? '—' : money(x.net)) + ' ›</div></div>';
+  }).join('');
+  html += '</div>';
+  document.getElementById('profBody').innerHTML = html;
+}
+
+async function chooseExpiry(balanceId, choice) {
+  if (!confirm('確定選擇「' + choice + '」？送出後需負責人核准。')) return;
+  try {
+    const r = await payCall('my_expiry_choose', {balance_id: balanceId, choice});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已送出，等待負責人核准');
+    openProfile();
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); }
+}
+
+async function reviewExpiry(decisionId, decision) {
+  try {
+    const r = await payCall('owner_expiry_review', {decision_id: decisionId, decision});
+    if (r.error) throw new Error(r.error);
+    toast(decision === 'approve' ? '✅ 已核准' : '↩️ 已退回');
+    openProfile();
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); }
+}
+
+async function openPayslip(id) {
+  show('sPaySlip');
+  const body = document.getElementById('psBody');
+  body.innerHTML = '<div class="card" style="color:#999">載入中…</div>';
+  try {
+    const r = await payCall('my_payslip', {payslip_id: id});
+    if (r.error) throw new Error(r.error);
+    paySlip = r.slip; payView = r.view;
+    renderPayslip();
+  } catch (e) { body.innerHTML = '<div class="card" style="color:#c62828">' + esc(e.message || e) + '</div>'; }
+}
+
+function renderPayslip() {
+  const s = paySlip, v = payView;
+  document.getElementById('psTitle').textContent = monthText(s.month) + ' 薪資單';
+  const st = PAY_STATUS[s.status] || [s.status, 'gray'];
+  const body = document.getElementById('psBody');
+  if (s.status === 'draft' || !v) {
+    body.innerHTML = '<div class="card"><span class="badge blue">負責人更正中</span>' +
+      '<div style="margin-top:10px;font-size:14px;color:#555">你提出的異議正在處理，更正後會用 LINE 通知你重新確認。</div></div>';
+    return;
+  }
+  const dl = s.confirm_deadline ? mdText(s.confirm_deadline) : '';
+  const rows = (list, minus) => list.map(x =>
+    '<div class="ps-row"><div>' + esc(x.category) + (x.sub ? '<div class="ps-sub">' + esc(x.sub) + '</div>' : '') + '</div>' +
+    '<div class="r' + (minus ? ' ps-minus' : '') + '">' + (minus ? '−' : '') + money(x.amount) + '</div></div>').join('');
+  let html =
+    '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b>' + esc(monthText(s.month)) + '</b>' +
+    '<span class="badge ' + st[1] + '">' + esc(st[0]) + '</span></div>' +
+    '<div class="hint" style="margin-top:6px">' + esc(s.name || '') + '　' + esc(s.employment_type || '') +
+    (s.status === 'published' && dl ? '　｜　請於 ' + esc(dl) + ' 23:59 前確認，逾期視同同意' : '') + '</div>' +
+    '<div class="ps-net">NT$ ' + money(s.net) + '</div>' +
+    '<div class="ps-tot"><span>應發 ' + money(s.gross) + '</span><span>扣除 ' + money(s.deduction) + '</span></div></div>' +
+    '<div class="card"><div class="ps-h"><span>應發項目</span><span>' + money(s.gross) + '</span></div>' + rows(v.earning, false) + '</div>' +
+    '<div class="card"><div class="ps-h"><span>扣除項目</span><span class="ps-minus">−' + money(s.deduction) + '</span></div>' + rows(v.deduction, true) + '</div>' +
+    '<div class="hint" style="margin:0 4px 12px">遲到、加班的每日時間，可到「班表與出勤」查看。</div>';
+  if ((s.status === 'published' || s.status === 'confirmed') && window.myRole !== '負責人') {
+    html += '<div class="btn-row">' +
+      (s.status === 'published' ? '<button class="btn btn-primary" id="btnPsOk" onclick="confirmPayslip()">確認無誤</button>' : '') +
+      '<button class="btn btn-secondary" onclick="openDispute()">提出異議</button></div>' +
+      '<div class="hint" style="text-align:center;margin-top:10px">確認與否都不影響發薪；有問題請按「提出異議」</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function confirmPayslip() {
+  const btn = document.getElementById('btnPsOk');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await payCall('my_confirm', {payslip_id: paySlip.payslip_id});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已確認');
+    openPayslip(paySlip.payslip_id);
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); btn.disabled = false; btn.textContent = '確認無誤'; }
+}
+
+function openDispute() {
+  const all = payView.earning.map(x => [x.category, money(x.amount)])
+    .concat(payView.deduction.map(x => [x.category, '−' + money(x.amount)]))
+    .concat([['其他', '']]);
+  document.getElementById('dpItems').innerHTML = all.map((x, i) =>
+    '<label class="ps-chk"><input type="checkbox" value="' + esc(x[0]) + '"><span>' + esc(x[0]) +
+    (x[1] ? '　' + esc(x[1]) : '（清單裡沒有的）') + '</span></label>').join('');
+  document.getElementById('dpContent').value = '';
+  const b = document.getElementById('btnDp'); b.disabled = false; b.textContent = '送出異議';
+  show('sPayDispute');
+}
+
+async function submitDispute() {
+  const items = Array.from(document.querySelectorAll('#dpItems input:checked')).map(x => x.value);
+  const content = document.getElementById('dpContent').value.trim();
+  if (!items.length) { toast('請勾選有問題的項目'); return; }
+  if (!content) { toast('請填寫異議內容'); return; }
+  const b = document.getElementById('btnDp');
+  b.disabled = true; b.textContent = '送出中...';
+  try {
+    const r = await payCall('my_dispute', {payslip_id: paySlip.payslip_id, items, content});
+    if (r.error) throw new Error(r.error);
+    toast('✅ 已送出，負責人會盡快處理');
+    openPayslip(paySlip.payslip_id);
+  } catch (e) { toast('❌ ' + (e.message || e), 4000); b.disabled = false; b.textContent = '送出異議'; }
+}
+
+// ─ 初始化 ─
+// 載入畫面：顯示卡在哪一步、已等幾秒（慢的時候請員工截圖這行給我）
+let curStep = '', loadT0 = Date.now(), loadTicker = null;
+function setStep(t) {
+  curStep = t;
+  const el = document.getElementById('loadStep');
+  if (el) el.textContent = t + '（已等 ' + Math.round((Date.now() - loadT0) / 1000) + ' 秒）';
+}
+async function init() {
+  buildTime24();
+  loadTicker = setInterval(() => {
+    const L = document.getElementById('sLoading');
+    if (!L || L.style.display === 'none') { clearInterval(loadTicker); return; }
+    setStep(curStep);
+  }, 1000);
+  try {
+    if (API.indexOf('【') === 0) throw new Error('尚未設定 API 網址');
+    setStep('1/3 連線 LINE');
+    await Promise.race([liff.init({liffId: LIFF_ID}),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('連線 LINE 逾時')), 20000))]);
+    if (!liff.isLoggedIn()) { setStep('登入 LINE 中'); liff.login(); return; }
+    setStep('2/3 取得員工資料');
+    const r = await call('getMe');
+    if (r.error) throw new Error(r.error);
+    if (r.bound) {
+      document.getElementById('welcome').textContent = 'Hello~' + r.employee.name;
+      applyRole(r.employee);
+      show('sMenu');
+    } else {
+      const sel = document.getElementById('bindSel');
+      (r.unboundList || []).forEach(n => {
+        const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+      });
+      show('sBind');
+    }
+  } catch (e) {
+    document.getElementById('sLoading').innerHTML =
+      '<div style="padding:24px;color:#c62828;text-align:center">載入失敗（' + esc(curStep) + '）：' + esc(e.message || e) +
+      '<div style="margin-top:16px"><button class="btn btn-primary" onclick="location.reload()">重新載入</button></div></div>';
+  }
+}
+
+// ─ 綁定 ─
+async function bindAccount() {
+  const name = document.getElementById('bindSel').value;
+  if (!name) { toast('請選擇姓名'); return; }
+  const btn = document.getElementById('btnBind');
+  btn.disabled = true; btn.textContent = '綁定中，請稍候...';
+  try {
+    const r = await call('bindLine', {staffName: name});
+    if (r.error) { toast('❌ ' + r.error, 4000); btn.disabled = false; btn.textContent = '確認綁定'; return; }
+    document.getElementById('welcome').textContent = 'Hello~' + name;
+    toast('✅ 綁定成功！');
+    try { const me = await call('getMe'); if (me.employee) applyRole(me.employee); } catch (e) {}
+    setTimeout(() => show('sMenu'), 1000);
+  } catch (e) {
+    toast('❌ ' + (e.message || e), 4000);
+    btn.disabled = false; btn.textContent = '確認綁定';
+  }
+}
+
+// ─ 打卡 ─
+function startClock() {
+  function tick() {
+    const now = new Date();
+    document.getElementById('clockTime').textContent =
+      now.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Taipei'});
+    document.getElementById('clockDate').textContent =
+      now.toLocaleDateString('zh-TW', {year: 'numeric', month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Taipei'});
+  }
+  tick(); clockTimer = setInterval(tick, 1000);
+  const ls = document.getElementById('locStatus'); ls.textContent = ''; ls.className = 'loc-status';
+  loadClock();
+}
+
+const LEAVE_NAME = {'休': '休息日', '例': '例假', '特': '特休', '餘': '餘假', '事': '事假', '病': '病假', '生': '生理假', '颱': '颱風假'};
+const SHIFT_NAME = {A: 'A 班', B: 'B 班', W: '工作室班', 活: '活動班'};
+// 班別說明文字：活動班沒有固定上下班時間，其他班別顯示起訖時間與崗位
+function shiftDesc(s) {
+  if (s.shift_code === '活') return SHIFT_NAME['活'] + '（時間不固定，事後補打卡）';
+  return (SHIFT_NAME[s.shift_code] || s.shift_code) + ' ' + s.start + '–' + s.end + (s.position ? ' · ' + s.position : '');
+}
+
+async function loadClock() {
+  const sched = document.getElementById('schedLine'), st = document.getElementById('clockStatus');
+  try {
+    const r = await call('clockStatus');
+    if (r.error) { st.innerHTML = '<span class="badge warn">' + esc(r.error) + '</span>'; return; }
+    const s = r.schedule;
+    if (!s) sched.textContent = '今日班表：未排班';
+    else if (s.leave_code) sched.textContent = '今日班表：' + (LEAVE_NAME[s.leave_code] || s.leave_code);
+    else sched.textContent = '今日班表：' + shiftDesc(s);
+
+    if ((r.leaves || []).length) {
+      sched.textContent += '　｜　請假：' + r.leaves.map(l => lvName(l.type) + ' ' + l.start + '–' + l.end).join('、');
+    }
+    const recs = r.records || [];
+    st.innerHTML = recs.length
+      ? recs.map(x => '<span class="badge ' + (x.type === 'in' ? 'ok' : 'blue') + '">' + (x.type === 'in' ? '上班 ' : '下班 ') + fmt(x.time) + '</span>').join('')
+        + (r.state === 'in' ? '<span class="badge warn">上班中</span>' : '')
+      : '<span class="badge gray">今日尚未打卡</span>';
+    applyButtons(r.state);
+    showUndo(r.undo);
+  } catch (e) { st.innerHTML = '<span class="badge warn">' + esc(e.message || e) + '</span>'; }
+}
+
+// 防誤按：剛打的卡 3 分鐘內可以自己取消（後端也會檢查；超過請用補打卡）
+let undoTimer = null;
+function showUndo(u) {
+  const btn = document.getElementById('btnUndo'), hint = document.getElementById('undoHint');
+  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
+  if (!u) { btn.style.display = 'none'; hint.style.display = 'none'; return; }
+  btn.style.display = ''; hint.style.display = '';
+  btn.textContent = '取消剛才的' + (u.type === 'in' ? '上班' : '下班') + '打卡（' + fmt(u.time) + '）';
+  hint.textContent = '誤按的話，3 分鐘內可以自己取消；超過請用「補打卡」申請。';
+  undoTimer = setTimeout(() => { if (document.getElementById('sClock').classList.contains('active')) loadClock(); }, (u.seconds_left + 1) * 1000);   // 時間到，按鈕自動消失
+}
+async function undoPunch() {
+  if (busy) return;
+  if (!confirm('確定要取消剛才的打卡嗎？')) return;
+  busy = true; applyButtons();
+  try {
+    const r = await call('undoLastPunch');
+    if (r.error) toast('❌ ' + r.error, 5000); else toast('已取消剛才的打卡');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  busy = false;
+  await loadClock();
+  applyButtons();
+}
+
+let lastState = null;
+function applyButtons(state) {
+  if (state) lastState = state;
+  const bi = document.getElementById('btnIn'), bo = document.getElementById('btnOut');
+  bi.disabled = busy || lastState !== 'none' && lastState !== 'out';
+  bo.disabled = busy || lastState !== 'in';
+  bi.textContent = busy ? '處理中…' : '上班打卡';      // 處理中兩個按鈕都變灰、改字，避免以為沒按到又再按
+  bo.textContent = busy ? '處理中…' : '下班打卡';
+}
+// 打卡狀態大字（kind：'' 進行中、'ok' 成功、'err' 失敗）
+function setLoc(text, kind) {
+  const el = document.getElementById('locStatus');
+  el.textContent = text;
+  el.className = 'loc-status big' + (kind ? ' ' + kind : '');
+}
+
+function getPos() {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('此裝置不支援定位'));
+    navigator.geolocation.getCurrentPosition(res,
+      e => rej(new Error(e.code === 1 ? '請允許 LINE 使用定位權限' : '無法取得定位，請到訊號較好的地方再試')),
+      {enableHighAccuracy: false, timeout: 10000, maximumAge: 0});     // 每次打卡都重新定位，不沿用舊位置（一般定位，不用 GPS）
+  });
+}
+
+// 不在範圍內時，從後端訊息「距貓燙 820m … 需在 500 公尺內」算出「還差多少公尺」（取最近的打卡點）
+function farText(msg) {
+  const lim = (msg.match(/需在\s*(\d+)\s*公尺/) || [])[1];
+  const ds = (msg.match(/(\d+)m/g) || []).map(x => parseInt(x, 10));
+  if (!lim || !ds.length) return '';
+  const over = Math.min.apply(null, ds) - Number(lim);
+  return over > 0 ? '\n還差 ' + over + ' 公尺' : '';
+}
+async function doClock(type) {
+  if (busy) return;
+  busy = true; applyButtons();
+  try {
+    setLoc('📍 取得定位中…');
+    const pos = await getPos();
+    setLoc('⏳ 打卡中…');
+    const r = await call(type === 'in' ? 'clockIn' : 'clockOut', {lat: pos.coords.latitude, lng: pos.coords.longitude});
+    if (r.error) {
+      setLoc('❌ ' + r.error + farText(r.error), 'err');
+      toast('❌ ' + r.error, r.code === 'TOO_SOON' ? 7000 : 4000);
+    } else {
+      setLoc('✅ ' + (type === 'in' ? '上班' : '下班') + '打卡成功｜' + r.location + '（' + r.distance + ' 公尺）', 'ok');
+      toast(type === 'in' ? '✅ 上班打卡成功！' : '✅ 下班打卡成功！');
+    }
+  } catch (e) {
+    setLoc('❌ ' + (e.message || e), 'err');
+    toast('❌ ' + (e.message || e), 4000);
+  }
+  busy = false;
+  await loadClock();
+  applyButtons();
+}
+
+// ─ 我的出勤 ─
+async function loadAttendance() {
+  const p = taipeiToday().split('-');
+  attY = Number(p[0]); attM = Number(p[1]);
+  show('sAtt');
+  const box = document.getElementById('attWhoBox');
+  if (window.myRole === '負責人') {            // 只有負責人可以切換員工
+    box.style.display = '';
+    const sel = document.getElementById('attWho'), list = await ensureEmpList();
+    sel.innerHTML = '<option value="' + esc(window.myEmployeeId) + '">我自己</option>' +
+      list.filter(x => x.employee_id !== window.myEmployeeId).map(x => '<option value="' + esc(x.employee_id) + '">' + esc(x.name) + '</option>').join('');
+    sel.value = window.myEmployeeId;
+  } else { box.style.display = 'none'; }
+  renderAtt();
+}
+// 員工名單（依班表順序）；失敗不快取，下次再試
+async function ensureEmpList() {
+  if (schedEmpList && schedEmpList.length) return schedEmpList;
+  try { const r = await call('employeeList'); if (!r.error) schedEmpList = r.items; } catch (e) {}
+  return schedEmpList || [];
+}
+function shiftMonth(d) { [attY, attM] = addMonth(attY, attM, d); renderAtt(); }
+let attSeq = 0;
+async function renderAtt() {
+  document.getElementById('attMonth').textContent = attY + ' 年 ' + attM + ' 月';
+  const sum = document.getElementById('attSummary'), list = document.getElementById('attList');
+  sum.innerHTML = '<div style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  list.innerHTML = '';
+  const seq = ++attSeq;
+  try {
+    const who = document.getElementById('attWho'), params = {year: attY, month: attM};
+    if (window.myRole === '負責人' && who && who.value && who.value !== window.myEmployeeId) params.employeeId = who.value;
+    const r = await call('myMonthView', params);
+    if (seq !== attSeq) return;                       // 已切換月份或人，丟掉舊結果
+    if (r.error) { sum.textContent = r.error; return; }
+    const today = r.today, byDate = {}, leaveBy = {}, schedBy = {};
+    (r.records || []).forEach(x => { (byDate[x.work_date] = byDate[x.work_date] || []).push(x); });
+    let leaveMin = 0;
+    (r.leaves || []).forEach(x => { (leaveBy[x.work_date] = leaveBy[x.work_date] || []).push(x); leaveMin += Number(x.leave_minutes) || 0; });
+    (r.days || []).forEach(x => { schedBy[x.date] = x; });
+
+    let total = 0, shiftDays = 0, rows = [];
+    Array.from(new Set(Object.keys(byDate).concat(Object.keys(leaveBy), Object.keys(schedBy)))).sort().forEach(d => {
+      const sd = schedBy[d], lvs = leaveBy[d] || [];
+      let open = null, h = 0, segs = [];
+      (byDate[d] || []).forEach(x => {
+        if (x.punch_type === 'in') { if (open) segs.push({a: open, b: null}); open = x.punch_time; }
+        else if (open) { segs.push({a: open, b: x.punch_time}); h += (new Date(x.punch_time) - new Date(open)) / 36e5; open = null; }
+      });
+      if (open) segs.push({a: open, b: null});
+      if (d >= WORK_BREAK_FROM && h > 4) h -= 0.5;     // 2027 起：一天打卡超過 4 小時扣 30 分鐘休息（和薪資計算相同）
+      total += h;
+      const hasShift = !!(sd && sd.shift);
+      if (hasShift) shiftDays++;
+      const fullLeave = lvs.some(l => l.source === 'sheet') || !!(sd && sd.request && sd.request.full);
+
+      // 沒有班、沒有打卡、沒有請假：只是休息日／例假，淡灰一行
+      if (!segs.length && !lvs.length && !hasShift) {
+        rows.push('<div class="list-item" style="padding:6px 0;opacity:.7"><div style="font-size:12px;color:#999">' + esc(d.slice(5)) +
+          ' 週' + dowOf(d) + '　' + esc(sd && sd.leave ? sd.leave.label : '—') + '</div></div>');
+        return;
+      }
+      let lines = '';
+      if (hasShift) {
+        const sh = sd.shift, t = (sh.code === '活' ? '時間不固定' : esc(sh.start) + '–' + esc(sh.end)) + (sh.position ? ' · ' + esc(sh.position) : '');
+        lines += fullLeave
+          ? '<div style="font-size:12px;color:#aaa;text-decoration:line-through">原班 ' + esc(sh.label) + ' ' + t + '</div>'
+          : '<div style="font-size:13px"><span class="sched-chip chip-' + esc(sh.code) + '">' + esc(sh.label) + '</span> ' + t + '</div>';
+      }
+      if (segs.length) lines += '<div style="font-size:12px;color:#666">打卡 ' +
+        segs.map(s => fmt(s.a) + '–' + (s.b ? fmt(s.b) : '未下班')).join('、') + '</div>';
+      // 負責人：每筆打卡旁有「作廢」（誤按等）；補打卡產生的要到「審核 → 已審核」作廢那筆補打卡
+      if (window.myRole === '負責人' && (byDate[d] || []).length) {
+        lines += '<div>' + byDate[d].map(x => {
+          const lab = TYPE_TXT[x.punch_type] + ' ' + fmt(x.punch_time);
+          return x.makeup_request_id
+            ? '<span class="mini off">補卡 ' + esc(lab) + '</span>'
+            : '<button class="mini" onclick="voidPunchBtn(\'' + esc(x.record_id) + '\',\'' + esc(lab) + '\')">作廢 ' + esc(lab) + '</button>';
+        }).join('') + '</div>';
+      }
+      lvs.forEach(l => {
+        const whole = l.source === 'sheet' || fullLeave;
+        lines += '<div style="font-size:12px;color:#d32f2f">' + esc(lvName(l.leave_type)) + ' ' +
+          (whole && lvs.length === 1 ? '整天（' + fmtDur(l.leave_minutes) + '）'
+            : fmt(l.start_datetime) + '–' + fmt(l.end_datetime) + '（' + fmtDur(l.leave_minutes) + '）') + '</div>';
+      });
+      const dangling = segs.some(s => !s.b);
+      const tag = segs.length
+        ? (dangling ? (d === today ? '<span class="badge blue">上班中</span>' : '<span class="badge warn">未下班</span>') : '<span class="badge ok">✓ ' + h.toFixed(1) + 'h</span>')
+        : lvs.length ? '<span class="badge blue">請假</span>'
+        : (hasShift && d < today ? '<span class="badge gray">無打卡</span>' : '');
+      rows.push('<div class="list-item"' + (d === today ? ' id="attToday" style="background:#fffde7"' : '') + '><div><div style="font-size:13px;font-weight:500">' +
+        esc(d.slice(5)) + ' <span style="font-size:11px;color:#999">週' + dowOf(d) + '</span></div>' + lines + '</div>' + tag + '</div>');
+    });
+    sum.innerHTML = '<div class="stat-row"><span>排班天數</span><span class="stat-val">' + shiftDays + ' 天</span></div>' +
+      '<div class="stat-row"><span>出勤天數</span><span class="stat-val">' + Object.keys(byDate).length + ' 天</span></div>' +
+      '<div class="stat-row"><span>打卡總時數</span><span class="stat-val">' + total.toFixed(1) + ' h</span></div>' +
+      (leaveMin ? '<div class="stat-row"><span>已核准請假時數</span><span class="stat-val">' + fmtDur(leaveMin) + '</span></div>' : '') +
+      '<div style="font-size:11px;color:#999">' + (attY >= 2027 ? '打卡時數為上下班時間相加，一天超過 4 小時已扣 30 分鐘休息；實際以薪資單為準' : '打卡時數為上下班時間相加（2026 年不扣休息時間），實際以薪資單為準') + '</div>';
+    list.innerHTML = rows.length ? rows.join('') : '<div style="text-align:center;color:#999;padding:12px">這個月沒有排班、打卡或請假紀錄</div>';
+    const t = document.getElementById('attToday');
+    if (t && attY + '-' + (attM < 10 ? '0' : '') + attM === today.slice(0, 7)) t.scrollIntoView({block: 'center'});
+  } catch (e) { if (seq === attSeq) sum.textContent = e.message || e; }
+}
+
+// 負責人作廢單筆打卡（不刪除；員工會收到 LINE 通知）
+async function voidPunchBtn(id, label) {
+  if (reviewing) return;
+  const reason = prompt('作廢「' + label + '」的原因（員工會收到通知，可留空）');
+  if (reason === null) return;
+  reviewing = true;
+  try {
+    const r = await call('voidPunch', {recordId: id, reason});
+    if (r.error) toast('❌ ' + r.error, 5000); else toast('已作廢，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderAtt();
+}
+
+// ─ 角色 ─
+function applyRole(emp) {
+  const isOwner = emp && emp.role === '負責人';
+  document.getElementById('menuReview').style.display = isOwner ? '' : 'none';
+  document.getElementById('menuAnomaly').style.display = isOwner ? '' : 'none';
+  window.myRole = emp ? emp.role : null;
+  window.myEmploymentType = emp ? emp.employment_type : null;
+  window.myEmployeeId = emp ? emp.employee_id : null;
+}
+function addDays(dateStr, n) {
+  return new Date(new Date(dateStr + 'T12:00:00+08:00').getTime() + n * 86400000)
+    .toLocaleDateString('sv-SE', {timeZone: 'Asia/Taipei'});
+}
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+function dowOf(d) { return WEEKDAYS[new Date(d + 'T12:00:00+08:00').getDay()]; }
+// 年月加減 d 個月，回傳 [年, 月]（各頁面切換月份共用）
+function addMonth(y, m, d) { const t = y * 12 + (m - 1) + d; return [Math.floor(t / 12), t % 12 + 1]; }
+const TYPE_TXT = {in: '上班', out: '下班'};
+const STATUS_TAG = {
+  pending: '<span class="badge warn">待審核</span>',
+  approved: '<span class="badge ok">已核准</span>',
+  rejected: '<span class="badge gray">未通過</span>',
+  cancelled: '<span class="badge gray">已取消</span>'
+};
+
+// ─ 補打卡（員工）─
+function openMakeup() {
+  const today = taipeiToday(), el = document.getElementById('mkDate');
+  el.max = today; el.min = addDays(today, -14);
+  if (!el.value) el.value = today;
+  show('sMakeup');
+  loadMyMakeups();
+}
+
+async function submitMakeup() {
+  const date = document.getElementById('mkDate').value;
+  const inT = document.getElementById('mkIn').value, outT = document.getElementById('mkOut').value;
+  const reason = document.getElementById('mkReason').value.trim();
+  if (!date) { toast('請選擇日期'); return; }
+  if (!inT && !outT) { toast('請至少填上班或下班時間'); return; }
+  if (!reason) { toast('請填寫原因'); return; }
+  const btn = document.getElementById('btnMk');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await call('submitMakeup', {date, inTime: inT, outTime: outT, reason});
+    if (r.error) toast('❌ ' + r.error, 4500);
+    else {
+      toast('✅ 已送出，等待負責人審核');
+      setTime24('mkIn', ''); setTime24('mkOut', '');
+      document.getElementById('mkReason').value = '';
+      loadMyMakeups();
+    }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  btn.disabled = false; btn.textContent = '送出申請';
+}
+
+async function loadMyMakeups() {
+  const box = document.getElementById('mkList');
+  box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div><div style="color:#999;font-size:13px">載入中...</div>';
+  try {
+    const r = await call('myMakeups');
+    if (r.error) { box.textContent = r.error; return; }
+    const rows = (r.items || []).map(x =>
+      '<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(x.work_date.slice(5)) +
+      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + TYPE_TXT[x.punch_type] + ' ' + fmt(x.requested_time) + '</div>' +
+      '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') + '</div></div>' +
+      (STATUS_TAG[x.status] || '') + '</div>').join('');
+    box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div>' +
+      (rows || '<div style="color:#999;font-size:13px">還沒有申請紀錄</div>');
+  } catch (e) { box.textContent = e.message || e; }
+}
+
+// ─ 待審核（負責人）─
+let rvTab = 'pending', rvY = 0, rvM = 0;
+function openReview() {
+  const p = taipeiToday().split('-');
+  rvY = Number(p[0]); rvM = Number(p[1]); rvTab = 'pending';
+  show('sReview'); renderReviewTabs(); renderReview();
+}
+function setRvTab(t) { rvTab = t; renderReviewTabs(); renderReview(); }
+function renderReviewTabs() {
+  document.getElementById('rvTabP').className = rvTab === 'pending' ? 'on' : '';
+  document.getElementById('rvTabD').className = rvTab === 'done' ? 'on' : '';
+  document.getElementById('rvMonthNav').style.display = rvTab === 'done' ? '' : 'none';
+}
+function shiftRvMonth(d) { [rvY, rvM] = addMonth(rvY, rvM, d); renderReview(); }
+
+// ─ 已審核：當月所有已核准、未通過、已作廢的請假與補打卡（日期由新到舊）─
+const DONE_TAG = {
+  approved: '<span class="badge ok">已核准</span>',
+  rejected: '<span class="badge gray">未通過</span>',
+  voided: '<span class="badge gray">已作廢</span>'
+};
+async function renderReviewed() {
+  document.getElementById('rvMonth').textContent = rvY + ' 年 ' + rvM + ' 月';
+  const box = document.getElementById('reviewList');
+  box.innerHTML = '<div class="card" style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  try {
+    const r = await call('reviewedList', {year: rvY, month: rvM});
+    if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+    if (!r.items.length) { box.innerHTML = '<div class="card" style="text-align:center;color:#999">這個月沒有已審核的紀錄</div>'; return; }
+    box.innerHTML = r.items.map(doneCard).join('');
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+function doneCard(x) {
+  const isLeave = x.kind === 'leave';
+  const what = isLeave
+    ? (x.source === 'sheet'
+        ? '請假　' + esc(x.leave_type) + ' <b>整天</b> <span style="font-size:12px;color:#666">（' + fmtDur(x.minutes) + '）</span>'
+        : '請假　' + esc(x.leave_type) + ' <b>' + esc(x.start) + '–' + esc(x.end) + '</b> <span style="font-size:12px;color:#666">（' + fmtDur(x.minutes) + '）</span>')
+    : x.kind === 'punch'
+      ? '打卡　' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.time) + '</b>'
+      : '補打卡　' + TYPE_TXT[x.punch_type] + ' <b>' + fmt(x.time) + '</b>';
+  const note = x.status === 'voided' ? (x.void_reason ? '作廢原因：' + x.void_reason : '') : (x.review_note ? '說明：' + x.review_note : '');
+  const fromSheet = x.source === 'sheet';
+  const btn = x.status !== 'approved' ? ''
+    : fromSheet ? '<div class="hint" style="margin-top:6px">班表同步登記的假，要取消請修改 Sheets 班表後重新同步</div>'
+    : '<div class="btn-row"><button class="btn btn-secondary" onclick="voidRecord(\'' + x.kind + '\',\'' + esc(x.id) + '\')">作廢</button></div>';
+  return '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:15px;font-weight:600">' +
+      esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' + (fromSheet ? '<span class="badge gray">班表同步</span>' : '') + (x.kind === 'punch' && x.self ? '<span class="badge gray">員工自行取消</span>' : '') + (DONE_TAG[x.status] || '') + '</div>' +
+    '<div style="font-size:16px;margin:6px 0">' + what + '</div>' +
+    (x.reason ? '<div style="font-size:12px;color:#666">原因：' + esc(x.reason) + '</div>' : '') +
+    (isLeave && x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:2px">代班人：' + covText(x) + '</div>' : '') +
+    (isLeave && x.balance_min !== null && x.balance_min !== undefined ? '<div style="font-size:12px;color:#666;margin-top:2px">' + esc(x.name) + ' ' + esc(x.leave_type) + '目前餘額：' + fmtDur(x.balance_min) + '</div>' : '') +
+    (note ? '<div style="font-size:12px;color:#888;margin-top:2px">' + esc(note) + '</div>' : '') + btn + '</div>';
+}
+async function voidRecord(kind, id) {
+  if (reviewing) return;
+  const reason = prompt(kind === 'leave'
+    ? '作廢原因（員工會收到通知；特休、餘假會退還餘額，可留空）'
+    : '作廢原因（員工會收到通知；對應的打卡紀錄會一併作廢，可留空）');
+  if (reason === null) return;
+  reviewing = true;
+  try {
+    const r = await call(kind === 'leave' ? 'voidLeave' : 'voidMakeup',
+      kind === 'leave' ? {leaveId: id, reason} : {requestId: id, reason});
+    if (r.error) toast('❌ ' + r.error, 5000); else toast('已作廢，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+
+async function renderReview() {
+  if (rvTab === 'done') return renderReviewed();
+  const box = document.getElementById('reviewList');
+  box.innerHTML = '<div class="card" style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  try {
+    const [mk, lv] = await Promise.all([call('pendingMakeups'), call('pendingLeaves')]);
+    if (mk.error) { box.innerHTML = '<div class="card">' + esc(mk.error) + '</div>'; return; }
+    if (lv.error) { box.innerHTML = '<div class="card">' + esc(lv.error) + '</div>'; return; }
+    if (!mk.items.length && !lv.items.length) {
+      box.innerHTML = '<div class="card" style="text-align:center;color:#999">目前沒有待審核的申請 🎉</div>'; return;
+    }
+    box.innerHTML =
+      (lv.items.length ? '<div class="hint" style="margin:0 4px 6px">請假申請（' + lv.items.length + '）</div>' + lv.items.map(leaveCard).join('') : '') +
+      (mk.items.length ? '<div class="hint" style="margin:6px 4px">補打卡申請（' + mk.items.length + '）</div>' + mk.items.map(reviewCard).join('') : '');
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+
+function leaveCard(x) {
+  const s = x.schedule;
+  const sched = !s ? '未排班' : shiftDesc(s);
+  const id = esc(x.leave_id);
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
+    '<div style="font-size:18px;margin:8px 0">' + esc(x.leave_type) + ' <b>' + esc(x.start) + '–' + esc(x.end) + '</b> <span style="font-size:13px;color:#666">（' + fmtDur(x.minutes) + '）</span></div>' +
+    '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
+    '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
+    (x.covering_name ? '<div style="font-size:12px;color:#666;margin-top:4px">代班人：' + covText(x) + '</div>' : '') +
+    (x.remaining_min !== null ? '<div style="font-size:12px;color:#666;margin-top:4px">' + esc(x.leave_type) + '目前餘額：' + fmtDur(x.remaining_min) + '</div>' : '') +
+    (x.menstrualNote ? '<div style="font-size:12px;color:#e65100;margin-top:4px">⚠️ ' + esc(x.menstrualNote) + '</div>' : '') +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReviewLeave(\'' + id + '\',\'approve\')">核准</button>' +
+    '<button class="btn btn-secondary" onclick="doReviewLeave(\'' + id + '\',\'reject\')">拒絕</button></div></div>';
+}
+
+function reviewCard(x) {
+  const s = x.schedule;
+  const sched = !s ? '未排班' : s.leave_code ? (LEAVE_NAME[s.leave_code] || s.leave_code)
+    : shiftDesc(s);
+  const ps = (x.punches || []).map(p =>
+    '<span class="badge ' + (p.type === 'in' ? 'ok' : 'blue') + '">' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</span>').join('');
+  const reqs = (x.requests && x.requests.length) ? x.requests : [{request_id: x.request_id, punch_type: x.punch_type, requested_time: x.requested_time}];
+  const id = esc(reqs.map(r => r.request_id).join(','));
+  // 核准時和既有打卡順序衝突：讓負責人勾選要作廢的既有打卡（補打卡產生的不能在這裡作廢）
+  const vlist = (x.punches || []).filter(p => p.id && !p.byMakeup);
+  const panel = !mkConflict[id] ? '' :
+    '<div class="conflict"><div style="font-weight:600;margin-bottom:4px">⚠️ 和既有打卡的順序衝突</div>' +
+    '<div style="font-size:12px;color:#666;margin-bottom:4px">請勾選要作廢的既有打卡（通常是誤按的那幾筆），作廢後會接著核准這張補卡。作廢的紀錄會保留，可在「已審核」查到。</div>' +
+    (vlist.length
+      ? vlist.map(p => '<label><input type="checkbox" class="cfck" data-card="' + id + '" value="' + esc(p.id) + '"> ' + TYPE_TXT[p.type] + ' ' + fmt(p.time) + '</label>').join('')
+      : '<div style="font-size:12px;color:#999">這天沒有可以在這裡作廢的既有打卡（可能是補打卡產生的，請先到「已審核」作廢那筆補打卡）</div>') +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReviewReplace(\'' + id + '\')">作廢勾選的打卡並核准</button>' +
+    '<button class="btn btn-secondary" onclick="closeConflict(\'' + id + '\')">取消</button></div></div>';
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:600">' + esc(x.name) + '　' + esc(x.work_date.slice(5)) + ' 週' + dowOf(x.work_date) + '</div>' +
+    '<div style="font-size:18px;margin:8px 0">補 ' + reqs.map(r => TYPE_TXT[r.punch_type] + ' <b>' + fmt(r.requested_time) + '</b>').join('　') + '</div>' +
+    '<div style="font-size:13px;color:#444;margin-bottom:8px">原因：' + esc(x.reason || '—') + '</div>' +
+    '<div style="font-size:12px;color:#666">當天班表：' + esc(sched) + '</div>' +
+    '<div style="font-size:12px;color:#666;margin-top:4px">既有打卡：' + (ps || '<span class="badge gray">無</span>') + '</div>' + panel +
+    '<div class="btn-row"><button class="btn btn-primary" onclick="doReview(\'' + id + '\',\'approve\')">核准</button>' +
+    '<button class="btn btn-secondary" onclick="doReview(\'' + id + '\',\'reject\')">拒絕</button></div></div>';
+}
+
+let reviewing = false;
+const mkConflict = {};      // 哪些補卡卡片要顯示「勾選作廢既有打卡」面板（key = 申請編號，逗號相連）
+async function doReview(id, decision) {
+  if (reviewing) return;
+  let note = '';
+  if (decision === 'reject') {
+    const n = prompt('拒絕原因（員工會收到，可留空）');
+    if (n === null) return;
+    note = n;
+  } else if (!confirm(id.indexOf(',') >= 0 ? '確定核准這天的上班與下班補打卡？' : '確定核准這筆補打卡？')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewMakeup', {requestIds: String(id).split(','), decision, note});
+    if (r.error) {
+      if (r.code === 'MAKEUP_CONFLICT') { mkConflict[id] = true; toast('⚠️ 和既有打卡順序衝突，請勾選要作廢的打卡', 5000); }
+      else toast('❌ ' + r.error, 5000);
+    } else { delete mkConflict[id]; toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工'); }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+
+// 勾選要作廢的既有打卡 → 先作廢、再核准（核准失敗會自動還原）
+async function doReviewReplace(id) {
+  if (reviewing) return;
+  const ids = Array.from(document.querySelectorAll('input.cfck')).filter(c => c.checked && c.dataset.card === id).map(c => c.value);
+  if (!ids.length) { toast('請先勾選要作廢的打卡'); return; }
+  if (!confirm('將作廢勾選的 ' + ids.length + ' 筆既有打卡，接著核准這張補打卡。確定嗎？')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewMakeup', {requestIds: String(id).split(','), decision: 'approve', note: '', voidRecordIds: ids});
+    if (r.error) toast('❌ ' + r.error, 6000);
+    else { delete mkConflict[id]; toast('✅ 已作廢並核准，已通知員工'); }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+function closeConflict(id) { delete mkConflict[id]; renderReview(); }
+
+const WORK_BREAK_FROM = '2027-01-01';   // 2027 起連續工作超過 4 小時扣 30 分鐘休息（和後端 Leave.gs、PayrollAPI.gs 相同）
+
+// 兼職自己看到的假別名稱：事假一律叫「請假」（負責人、正職照原本名稱；資料庫仍是事假）
+function lvName(t) { return window.myEmploymentType === '兼職' && t === '事假' ? '請假' : t; }
+
+// ─ 請假（員工）─
+async function openLeave() {
+  const sel = document.getElementById('lvType');
+  // 兼職只能請「請假」（記錄為事假）、生理假、颱風假
+  const part = window.myEmploymentType === '兼職';
+  Array.from(sel.options).forEach(o => {
+    o.hidden = part && ['事假', '生理假', '颱風假'].indexOf(o.value) < 0;
+    if (o.value === '事假') o.textContent = part ? '請假' : '事假';
+  });
+  if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = part ? '事假' : '特休';
+  const today = taipeiToday();
+  const d = document.getElementById('lvDate'), e = document.getElementById('lvEnd');
+  d.min = addDays(today, -14); d.max = addDays(today, 60);
+  e.min = d.min; e.max = addDays(today, 60);
+  if (!d.value) d.value = today;
+  show('sLeave');
+  onLvTypeChange();
+  const cSel = document.getElementById('lvCovering');
+  cSel.innerHTML = '<option value="">無</option>';
+  toggleCovBox();
+  if (!schedEmpList || !schedEmpList.length) {
+    try {
+      const r = await call('employeeList');
+      if (r.error) throw new Error(r.error);
+      schedEmpList = r.items || [];
+    } catch (err) {
+      schedEmpList = null;   // 失敗不快取，下次開啟會重試
+      cSel.innerHTML = '<option value="">（代班人名單載入失敗，請重新開啟此頁）</option>';
+    }
+  }
+  if (schedEmpList && schedEmpList.length) {
+    cSel.innerHTML = '<option value="">無</option>' +
+      schedEmpList.filter(x => x.employee_id !== window.myEmployeeId)
+        .map(x => '<option value="' + esc(x.employee_id) + '">' + esc(x.name) + '</option>').join('');
+  }
+  loadMyLeaves();
+}
+// ─ 24 小時制時間選擇（取代手機內建的時間選擇器，避免因手機設定顯示上午／下午）─
+const p2 = n => (n < 10 ? '0' : '') + n;
+function buildTime24() {
+  document.querySelectorAll('.time24').forEach(box => {
+    const id = box.dataset.for;
+    box.innerHTML = '<div class="row"><select class="select t24h"><option value="">時</option>' +
+      Array.from({length: 24}, (_, i) => '<option value="' + p2(i) + '">' + p2(i) + '</option>').join('') +
+      '</select><span>:</span><select class="select t24m"></select></div>';
+    fillT24Minutes(box, 1);
+    box.querySelector('.t24h').onchange = () => {
+      const h = box.querySelector('.t24h').value, m = box.querySelector('.t24m');
+      if (h && !m.value) m.value = '00';     // 選了「時」就先帶 00 分，少點一次
+      syncT24(id);
+    };
+    box.querySelector('.t24m').onchange = () => syncT24(id);
+  });
+}
+function fillT24Minutes(box, step) {
+  const sel = box.querySelector('.t24m'), keep = sel.value;
+  let html = '<option value="">分</option>';
+  for (let m = 0; m < 60; m += step) html += '<option value="' + p2(m) + '">' + p2(m) + '</option>';
+  sel.innerHTML = html;
+  sel.value = keep && Number(keep) % step === 0 ? keep : '';
+}
+function syncT24(id) {
+  const box = document.querySelector('.time24[data-for="' + id + '"]');
+  const h = box.querySelector('.t24h').value, m = box.querySelector('.t24m').value;
+  document.getElementById(id).value = (h && m) ? h + ':' + m : '';
+}
+function setTime24(id, val) {
+  const box = document.querySelector('.time24[data-for="' + id + '"]');
+  const parts = val ? val.split(':') : ['', ''];
+  box.querySelector('.t24h').value = parts[0];
+  box.querySelector('.t24m').value = parts[1];
+  syncT24(id);
+}
+function setTime24Step(id, step) {
+  fillT24Minutes(document.querySelector('.time24[data-for="' + id + '"]'), step);
+  syncT24(id);
+}
+// 特休、餘假的分鐘只能選 00／30；其他假別 00–59
+function onLvTypeChange() {
+  const quota = ['特休', '餘假'].indexOf(document.getElementById('lvType').value) >= 0;
+  ['lvFrom', 'lvTo'].forEach(id => setTime24Step(id, quota ? 30 : 1));
+}
+// 分鐘 → 顯示：30 的倍數顯示小時（7.5 小時），其他顯示「幾小時幾分」
+function fmtDur(min) {
+  min = Math.round(Number(min) || 0);
+  if (min % 30 === 0) { const h = min / 60; return (Number.isInteger(h) ? h : h.toFixed(1)) + ' 小時'; }
+  const h = Math.floor(min / 60), m = min % 60;
+  return (h ? h + ' 小時 ' : '') + m + ' 分鐘';
+}
+function toggleCovBox() {
+  const on = !!document.getElementById('lvCovering').value;
+  document.getElementById('lvCovBox').style.display = on ? 'block' : 'none';
+  if (!on) { setTime24('lvCovFrom', ''); setTime24('lvCovTo', ''); }
+}
+// 代班人與代班時間的顯示：「（代班人姓名） 13:30–19:00」
+function covText(x) {
+  return esc(x.covering_name) + (x.covering_from && x.covering_to ? ' ' + esc(x.covering_from) + '–' + esc(x.covering_to) : '');
+}
+function toggleLvMode() {
+  const part = document.getElementById('lvMode').value === 'part';
+  document.getElementById('lvTimeBox').style.display = part ? 'block' : 'none';
+  document.getElementById('lvEndBox').style.display = part ? 'none' : 'block';
+}
+
+async function submitLeave() {
+  const type = document.getElementById('lvType').value;
+  const part = document.getElementById('lvMode').value === 'part';
+  const date = document.getElementById('lvDate').value;
+  const endDate = document.getElementById('lvEnd').value;
+  const from = document.getElementById('lvFrom').value, to = document.getElementById('lvTo').value;
+  if (!date) { toast('請選擇日期'); return; }
+  if (part && (!from || !to)) { toast('請填寫請假的開始與結束時間'); return; }
+  const covFrom = document.getElementById('lvCovFrom').value, covTo = document.getElementById('lvCovTo').value;
+  if (!!covFrom !== !!covTo) { toast('代班時間請填完整的開始與結束，或兩個都不填'); return; }
+  const btn = document.getElementById('btnLv');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const r = await call('submitLeave', {type, date, full: !part, endDate: part ? '' : endDate, from, to,
+      reason: document.getElementById('lvReason').value.trim(),
+      coveringEmployeeId: document.getElementById('lvCovering').value, coveringFrom: covFrom, coveringTo: covTo});
+    if (r.error) toast('❌ ' + r.error, 5000);
+    else {
+      toast('✅ 已送出 ' + r.count + ' 筆，等待負責人審核' + (r.skipped && r.skipped.length ? '（沒排班已略過：' + r.skipped.join('、') + '）' : '') +
+        (r.menstrualNote ? '\n⚠️ ' + r.menstrualNote : ''), r.menstrualNote ? 7000 : 5000);
+      document.getElementById('lvReason').value = '';
+      document.getElementById('lvEnd').value = '';
+      document.getElementById('lvCovering').value = '';
+      toggleCovBox();
+      loadMyLeaves();
+    }
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  btn.disabled = false; btn.textContent = '送出申請';
+}
+
+async function loadMyLeaves() {
+  const bal = document.getElementById('lvBal'), box = document.getElementById('lvList');
+  bal.innerHTML = '<div style="color:#999;font-size:13px">載入中...</div>'; box.innerHTML = '';
+  try {
+    const r = await call('myLeaves');
+    if (r.error) { bal.textContent = r.error; return; }
+    bal.style.display = window.myEmploymentType === '兼職' ? 'none' : '';   // 兼職的特休暫時不在 LIFF 顯示
+    bal.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的假期餘額</div>' +
+      ((r.balances || []).length
+        ? r.balances.map(b => '<div class="stat-row"><span>' + esc(b.type) + '（' + esc(b.expiry) + ' 到期）</span><span class="stat-val">' + fmtDur(b.remaining_min) + '</span></div>').join('')
+        : '<div style="color:#999;font-size:13px">尚未設定特休／餘假餘額，需要請特休或餘假請聯絡負責人</div>');
+    const rows = (r.items || []).map(x =>
+      '<div class="list-item"><div><div style="font-size:13px;font-weight:500">' + esc(x.work_date.slice(5)) +
+      ' <span style="font-size:11px;color:#999">週' + dowOf(x.work_date) + '</span> · ' + esc(lvName(x.leave_type)) + ' ' + fmt(x.start_datetime) + '–' + fmt(x.end_datetime) +
+      '（' + fmtDur(x.leave_minutes) + '）</div>' +
+      '<div style="font-size:12px;color:#666">' + esc(x.reason || '') + (x.status === 'rejected' && x.review_note ? '　說明：' + esc(x.review_note) : '') +
+      (x.covering_name ? '　代班：' + covText(x) : '') +
+      (x.menstrualNote ? '</div><div style="font-size:11px;color:#e65100;margin-top:2px">⚠️ ' + esc(x.menstrualNote) : '') + '</div></div>' +
+      '<div style="text-align:right">' + (STATUS_TAG[x.status] || '') +
+      (x.status === 'pending' ? '<div><button style="margin-top:4px;font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:6px;background:#fff" onclick="cancelLeave(\'' + esc(x.leave_id) + '\')">取消</button></div>' : '') +
+      '</div></div>').join('');
+    box.innerHTML = '<div style="font-size:13px;color:#666;margin-bottom:6px">我的申請</div>' +
+      (rows || '<div style="color:#999;font-size:13px">還沒有申請紀錄</div>');
+  } catch (e) { bal.textContent = e.message || e; }
+}
+
+async function cancelLeave(id) {
+  if (!confirm('確定取消這筆請假申請？')) return;
+  try {
+    const r = await call('cancelLeave', {leaveId: id});
+    toast(r.error ? '❌ ' + r.error : '已取消', 4000);
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  loadMyLeaves();
+}
+
+// ─ 請假審核（負責人）─
+async function doReviewLeave(id, decision) {
+  if (reviewing) return;
+  let note = '';
+  if (decision === 'reject') {
+    const n = prompt('拒絕原因（員工會收到，可留空）');
+    if (n === null) return;
+    note = n;
+  } else if (!confirm('確定核准這筆請假？（特休、餘假會同時扣除餘額）')) return;
+  reviewing = true;
+  try {
+    const r = await call('reviewLeave', {leaveId: id, decision, note});
+    if (r.error) toast('❌ ' + r.error, 5500);
+    else toast(decision === 'approve' ? '✅ 已核准，已通知員工' : '已拒絕，已通知員工');
+  } catch (e) { toast('❌ ' + (e.message || e), 4500); }
+  reviewing = false;
+  renderReview();
+}
+
+// ─ 異常清單（負責人）─
+let anY = 0, anM = 0;
+function openAnomalies() {
+  const p = taipeiToday().split('-');
+  anY = Number(p[0]); anM = Number(p[1]);
+  show('sAnom'); renderAnomalies();
+}
+function shiftAnomMonth(d) { [anY, anM] = addMonth(anY, anM, d); renderAnomalies(); }
+const AN_BADGE = {block: 'warn', warn: 'blue', info: 'gray'};
+function mdOf(d) { return Number(d.slice(5, 7)) + '/' + Number(d.slice(8, 10)) + ' 週' + dowOf(d); }
+async function renderAnomalies() {
+  document.getElementById('anMonth').textContent = anY + ' 年 ' + anM + ' 月';
+  const sum = document.getElementById('anSummary'), list = document.getElementById('anList');
+  sum.innerHTML = '<div style="text-align:center"><div class="spinner" style="margin:8px auto"></div></div>';
+  list.innerHTML = '';
+  try {
+    const r = await call('anomalies', {year: anY, month: anM});
+    if (r.error) { sum.textContent = r.error; return; }
+    let s = '<div class="stat-row"><span>異常項目</span><span class="stat-val">' + r.total + ' 筆</span></div>' +
+      '<div style="font-size:12px;color:#999">' + (r.evaluatedThrough
+        ? '判斷到 ' + esc(r.evaluatedThrough.slice(5)) + ' 為止（今天進行中的班不計）'
+        : '這個月還沒有可判斷的日期') + '</div>';
+    if (r.noSchedule) s += '<div style="font-size:13px;color:#e65100;margin-top:6px">⚠️ 這個月還沒有班表，無法判斷排班相關的異常</div>';
+    if (r.pendingCount) s += '<div style="font-size:13px;color:#e65100;margin-top:6px">⚠️ 有 ' + r.pendingCount + ' 筆待審核，結算前請先到「審核」處理</div>';
+    sum.innerHTML = s;
+    if (!r.groups.length) { list.innerHTML = '<div class="card" style="text-align:center;color:#999">沒有異常 🎉</div>'; return; }
+    list.innerHTML = r.groups.map(g =>
+      '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+      '<div style="font-size:15px;font-weight:600">' + esc(g.label) + '</div><span class="badge ' + (AN_BADGE[g.level] || 'gray') + '">' + g.items.length + '</span></div>' +
+      g.items.map(i => '<div class="an-item"><div><span class="who">' + esc(i.name) + '</span>　<span style="color:#999">' + esc(mdOf(i.date)) + '</span></div>' +
+        '<div class="txt">' + esc(i.text) + '</div></div>').join('') + '</div>').join('');
+  } catch (e) { sum.textContent = e.message || e; }
+}
+
+// ─ 員工名單快取（代班人選單、負責人切換查看出勤）─
+let schedEmpList = null;
+
+// ─ 全員班表 ─
+let allY = 0, allM = 0;
+function openAllSchedule() {
+  const p = taipeiToday().split('-');
+  allY = Number(p[0]); allM = Number(p[1]);
+  show('sAllSched');
+  renderAllSchedule();
+}
+function shiftAllMonth(d) { [allY, allM] = addMonth(allY, allM, d); renderAllSchedule(); }
+const POS_ICON = {領班: '☆', 吧台: 'Θ', 外場: '☺︎'};  // ︎：強制文字樣式，不要變成彩色表情符號
+function verticalName(name) {
+  return name.split('').map(c => '<span>' + esc(c) + '</span>').join('');
+}
+async function renderAllSchedule() {
+  document.getElementById('allSchedMonth').textContent = allY + ' 年 ' + allM + ' 月';
+  const box = document.getElementById('allSchedGrid');
+  box.innerHTML = '<div style="text-align:center;padding:16px"><div class="spinner" style="margin:0 auto"></div></div>';
+  try {
+    const r = await call('allMonthSchedule', {year: allY, month: allM});
+    if (r.error) { box.textContent = r.error; return; }
+    if (!r.employees.length) { box.innerHTML = '<div style="text-align:center;color:#999;padding:12px">這個月還沒有排班</div>'; return; }
+    const n = r.employees.length;
+    box.style.gridTemplateColumns = '';
+    const y0 = allY, m0 = allM;
+    let html = '<div class="sgrid" style="grid-template-columns:34px repeat(' + n + ', 40px)">';
+    html += '<div class="cell hcell corner"></div>';
+    r.employees.forEach(e => { html += '<div class="cell hcell">' + verticalName(e.name) + '</div>'; });
+    for (let d = 1; d <= r.days; d++) {
+      const dow = WEEKDAYS[new Date(y0 + '-' + String(m0).padStart(2, '0') + '-' + String(d).padStart(2, '0') + 'T12:00:00+08:00').getDay()];
+      html += '<div class="cell daycell"><span class="d">' + d + '</span><span class="w">' + dow + '</span></div>';
+      r.employees.forEach(e => {
+        const c = e.cells[d];
+        if (!c) { html += '<div class="cell"></div>'; return; }
+        if (c.isLeave) {
+          html += '<div class="cell"><span class="leave-chip' + (c.fromRequest ? ' req' : '') + '">' + esc(c.code) + '</span></div>';
+        } else if (c.code === 'W') {
+          html += '<div class="cell"><span class="shift-chip shift-W' + (c.partialLeave ? ' part' : '') + '">🍰</span></div>';
+        } else if (c.code === '活') {
+          html += '<div class="cell"><span class="shift-chip shift-ev' + (c.partialLeave ? ' part' : '') + '">活</span></div>';
+        } else {
+          const ico = c.position ? (POS_ICON[c.position] || '') : '';
+          html += '<div class="cell"><span class="shift-chip shift-' + c.code + (c.partialLeave ? ' part' : '') + '">' + ico + '</span></div>';
+        }
+      });
+    }
+    html += '</div><div class="hint" style="margin-top:8px">紅字＝已核准的整班請假；格子右上角紅點＝部分時段請假</div>';
+    box.innerHTML = html;
+  } catch (e) { box.textContent = e.message || e; }
+}
+
+init();
+
+// ===== 劃假 =====
+let wishData = null, wishMap = {}, wishPick = '休';
+async function openWish() {
+  show('sWish');
+  const box = document.getElementById('wishBody');
+  box.innerHTML = '<div class="card" style="color:#999">載入中...</div>';
+  try {
+    if (window.myRole === '負責人') return renderWishOverview(await call('wishOverview'));
+    const r = await call('wishGet');
+    if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+    wishData = r; wishMap = {};
+    (r.wishes || []).forEach(w => { wishMap[w.work_date] = w.wish_type; });
+    renderWish();
+  } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
+}
+function wishDate(d) { return wishData.month + '-' + String(d).padStart(2, '0'); }
+function wishCal(filter, onTap) {
+  const first = new Date(wishData.month + '-01T12:00:00+08:00').getDay();
+  let h = '<div class="wcal">' + ['日','一','二','三','四','五','六'].map(x => '<div class="wh">' + x + '</div>').join('');
+  for (let i = 0; i < first; i++) h += '<div></div>';
+  for (let d = 1; d <= wishData.days; d++) {
+    const ds = wishDate(d), t = wishMap[ds], dow = (first + d - 1) % 7;
+    const showT = t && filter.indexOf(t) >= 0 ? t : '';
+    h += '<div class="wd' + (dow === 0 || dow === 6 ? ' we' : '') + (showT ? ' t' + showT : '') + '" onclick="' + onTap + '(\'' + ds + '\')">' + d + (showT ? '<b>' + showT + '</b>' : '') + '</div>';
+  }
+  return h + '</div>';
+}
+function wishCount(t) { return Object.values(wishMap).filter(x => x === t).length; }
+function wishBalDays(type) {
+  const m = (wishData.balances || []).filter(b => b.type === type).reduce((a, b) => a + b.remaining_min, 0);
+  return Math.floor(m / 480 * 10) / 10;
+}
+function renderWish() {
+  const r = wishData, box = document.getElementById('wishBody');
+  const mLabel = Number(r.month.slice(5)) + ' 月';
+  const dl = Number(r.deadline.slice(5, 7)) + '/' + Number(r.deadline.slice(8));
+  let h = '<div class="card"><div style="font-weight:600;font-size:16px">' + esc(r.month.slice(0, 4)) + ' 年 ' + mLabel + '劃假</div>' +
+    '<div style="font-size:13px;color:#666;margin-top:4px">' +
+    (r.open ? '開放中，' + dl + ' 23:59 截止，期間內可以重複修改' : r.before ? '每月 15 號開放，' + dl + ' 截止' : '已截止，要調整請聯絡負責人') + '</div>' +
+    (r.submitted_at ? '<div style="font-size:12px;color:#3d9a62;margin-top:4px">✅ 已送出（' + fmtTs(r.submitted_at) + '）</div>' : '<div style="font-size:12px;color:#e65100;margin-top:4px">尚未送出</div>') + '</div>';
+  if (r.employment_type === '正職') {
+    const off = wishCount('休') + wishCount('餘');
+    h += '<div class="card"><div style="font-weight:600">選好假別，再點日期</div>' +
+      '<div class="wchips">' + ['休', '特', '餘'].map(t => '<div class="wchip' + (wishPick === t ? ' on' : '') + '" onclick="wishPick=\'' + t + '\';renderWish()">' + t + '</div>').join('') + '</div>' +
+      wishCal(['休', '特', '餘'], 'wishTapFull') +
+      '<div style="font-size:13px;margin-top:10px;line-height:1.7">休＋餘：<b style="color:' + (off > r.max_off ? '#c62828' : 'inherit') + '">' + off + '</b> / ' + r.max_off + ' 天（第 9 天由電腦排）<br>' +
+      '特休：' + wishCount('特') + ' 天（可用 ' + wishBalDays('特休') + ' 天）<br>餘假：' + wishCount('餘') + ' 天（可用 ' + wishBalDays('餘假') + ' 天）</div>' +
+      '<div style="font-size:12px;color:#999;margin-top:6px">例假、休息日由電腦分配；特休不算在 8 天內。再點一次同一天可以取消。</div></div>';
+  } else {
+    h += '<div class="card"><div style="font-weight:600">🟢 可以上班的日期</div>' + wishCal(['可'], 'wishTapCan') + '</div>' +
+      '<div class="card"><div style="font-weight:600">⚪ 不能上班的日期</div>' +
+      wishCal(['休'], 'wishTapCant') +
+      '<div style="font-size:13px;margin-top:10px">可上班 ' + wishCount('可') + ' 天・不能上班 ' + wishCount('休') + ' 天</div>' +
+      '<div style="font-size:12px;color:#999;margin-top:6px">同一天只能在一個月曆；兩邊都沒點的日子，當作可以上班但優先排有劃「可」的日子。</div></div>';
+  }
+  h += '<button class="btn btn-primary" id="wishBtn" onclick="saveWish()"' + (r.open ? '' : ' disabled') + '>' + (r.submitted_at ? '更新送出' : '送出') + '</button>';
+  box.innerHTML = h;
+}
+function wishToggle(ds, t) { if (wishMap[ds] === t) delete wishMap[ds]; else wishMap[ds] = t; renderWish(); }
+function wishTapFull(ds) { if (!wishData.open) return; wishToggle(ds, wishPick); }
+function wishTapCan(ds) { if (!wishData.open) return; wishToggle(ds, '可'); }
+function wishTapCant(ds) { if (!wishData.open) return; wishToggle(ds, '休'); }
+async function saveWish() {
+  const r = wishData;
+  if (r.employment_type === '正職' && wishCount('休') + wishCount('餘') > r.max_off) { toast('休＋餘最多 ' + r.max_off + ' 天'); return; }
+  const btn = document.getElementById('wishBtn');
+  btn.disabled = true; btn.textContent = '送出中...';
+  try {
+    const wishes = Object.keys(wishMap).sort().map(d => ({ work_date: d, wish_type: wishMap[d] }));
+    const res = await call('wishSave', { month: r.month, wishes });
+    if (res.error) { toast(res.error, 4000); btn.disabled = false; btn.textContent = '送出'; return; }
+    toast('已送出 ' + res.saved + ' 天');
+    r.submitted_at = res.submitted_at;
+    renderWish();
+  } catch (e) { toast(e.message || e); btn.disabled = false; btn.textContent = '送出'; }
+}
+function fmtTs(iso) {
+  const d = new Date(iso);
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function renderWishOverview(r) {
+  const box = document.getElementById('wishBody');
+  if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
+  const done = r.staff.filter(s => s.submitted_at).length;
+  let h = '<div class="card"><div style="font-weight:600;font-size:16px">' + Number(r.month.slice(5)) + ' 月劃假總覽</div>' +
+    '<div style="font-size:13px;color:#666;margin-top:4px">已送出 ' + done + ' / ' + r.staff.length + ' 人</div></div><div class="card">';
+  r.staff.forEach((s, i) => {
+    const cnt = t => s.wishes.filter(w => w.wish_type === t).length;
+    const summary = s.employment_type === '兼職' ? '可 ' + cnt('可') + '・休 ' + cnt('休') : '休 ' + cnt('休') + '・特 ' + cnt('特') + '・餘 ' + cnt('餘');
+    const detail = ['可', '休', '特', '餘'].map(t => {
+      const ds = s.wishes.filter(w => w.wish_type === t).map(w => Number(w.work_date.slice(8)));
+      return ds.length ? t + '：' + ds.join('、') : '';
+    }).filter(Boolean).join('<br>') || '沒有劃';
+    h += '<div class="list-item" style="cursor:pointer" onclick="var e=document.getElementById(\'wd' + i + '\');e.style.display=e.style.display===\'none\'?\'block\':\'none\'">' +
+      '<div><div style="font-size:14px;font-weight:500">' + esc(s.name) + ' <span style="font-size:11px;color:#999">' + esc(s.employment_type || '') + '</span></div>' +
+      '<div style="font-size:12px;color:#666">' + summary + '</div></div>' +
+      '<div style="font-size:12px;color:' + (s.submitted_at ? '#3d9a62' : '#e65100') + '">' + (s.submitted_at ? '已送出 ' + fmtTs(s.submitted_at) : '未送出') + '</div></div>' +
+      '<div id="wd' + i + '" style="display:none;font-size:13px;background:#faf7f5;border-radius:8px;padding:8px 10px;margin:4px 0">' + detail + '</div>';
+  });
+  box.innerHTML = h + '</div>';
+}
+</script>
+</body>
+</html>
