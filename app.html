@@ -2,6 +2,7 @@
 <!--
  ===== 版本紀錄（最新在最上面）=====
  檔名：app.html　｜　放在 GitHub Pages：mountaintown-liff（畫面左下角的小字就是這裡的版本）
+ v2.19.0  2026-11-19 22:55  打卡頁（讀取狀態、上下班打卡、取消剛才的打卡）改呼叫 Supabase 雲端小程式 clock；USE_CLOCK_FN 改 false 可切回 Apps Script
  v2.18.2  2026-11-18 23:41  精簡程式（兩個 API 呼叫合併、切換月份共用、刪除未使用的函式與樣式）；註解拿掉員工姓名；功能不變
  v2.18.1  2026-11-18 23:22  每次打卡都重新定位（不沿用 60 秒內的舊位置）；按下打卡顯示大字狀態、按鈕變「處理中…」；太遠時顯示還差多少公尺
  v2.18.0  2026-11-12 18:49  請假表單可填代班時間，各處顯示代班時間；班表與出勤的打卡時數 2027 起扣休息時間
@@ -353,7 +354,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.18.2</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.19.0</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -362,6 +363,9 @@ const API = 'https://script.google.com/macros/s/AKfycbxZH5DNK9AuH2HQNCY4PHAgPvqc
 
 // 薪資單由獨立的「貓燙 Payroll API」提供（PayrollAPI.gs），和打卡的 API 分開
 const PAY_API = 'https://script.google.com/macros/s/AKfycbzORjzw_iG3Ah7zVv5rx2B67kzO48lB7glFkOdhwbcUzKmaJ6dugFJRHHVrhCMBi3pg/exec';
+// 打卡改由 Supabase 雲端小程式 clock 處理（比 Apps Script 快）。有問題時把 USE_CLOCK_FN 改成 false，就會切回 Apps Script 的打卡
+const CLOCK_API = 'https://bgzmfkcxnlrdtbwgjcpv.supabase.co/functions/v1/clock';
+const USE_CLOCK_FN = true;
 
 let clockTimer = null, busy = false, attY = 0, attM = 0;
 
@@ -410,6 +414,7 @@ async function apiPost(url, action, data = {}) {
 }
 const call = (action, data) => apiPost(API, action, data);          // LIFF API
 const payCall = (action, data) => apiPost(PAY_API, action, data);   // 薪資 API
+const clockCall = (action, data) => apiPost(USE_CLOCK_FN ? CLOCK_API : API, action, data);   // 打卡頁（讀取狀態、打卡、取消）
 
 // ─ 薪資單 ─
 let paySlip = null, payView = null;
@@ -723,7 +728,7 @@ function shiftDesc(s) {
 async function loadClock() {
   const sched = document.getElementById('schedLine'), st = document.getElementById('clockStatus');
   try {
-    const r = await call('clockStatus');
+    const r = await clockCall('clockStatus');
     if (r.error) { st.innerHTML = '<span class="badge warn">' + esc(r.error) + '</span>'; return; }
     const s = r.schedule;
     if (!s) sched.textContent = '今日班表：未排班';
@@ -759,7 +764,7 @@ async function undoPunch() {
   if (!confirm('確定要取消剛才的打卡嗎？')) return;
   busy = true; applyButtons();
   try {
-    const r = await call('undoLastPunch');
+    const r = await clockCall('undoLastPunch');
     if (r.error) toast('❌ ' + r.error, 5000); else toast('已取消剛才的打卡');
   } catch (e) { toast('❌ ' + (e.message || e), 4500); }
   busy = false;
@@ -807,7 +812,7 @@ async function doClock(type) {
     setLoc('📍 取得定位中…');
     const pos = await getPos();
     setLoc('⏳ 打卡中…');
-    const r = await call(type === 'in' ? 'clockIn' : 'clockOut', {lat: pos.coords.latitude, lng: pos.coords.longitude});
+    const r = await clockCall(type === 'in' ? 'clockIn' : 'clockOut', {lat: pos.coords.latitude, lng: pos.coords.longitude});
     if (r.error) {
       setLoc('❌ ' + r.error + farText(r.error), 'err');
       toast('❌ ' + r.error, r.code === 'TOO_SOON' ? 7000 : 4000);
