@@ -2,6 +2,7 @@
 <!--
  ===== 版本紀錄（最新在最上面）=====
  檔名：app.html　｜　放在 GitHub Pages：mountaintown-liff（畫面左下角的小字就是這裡的版本）
+ v2.20.1  2026-11-27 03:10  劃假可提早劃下一段：畫面上同時有「本次排班」與「可以先劃」兩段，分別送出；特休兩段合計
  v2.20.0  2026-11-27 02:10  劃假改成兩週一段（2027 起）：正職劃例假（最多 2 天）／特休、國定假日調移申請；兼職點可／不能上班；國定假日標示；後端改呼叫 Supabase 雲端小程式 staff
  v2.19.0  2026-11-19 22:55  打卡頁（讀取狀態、上下班打卡、取消剛才的打卡）改呼叫 Supabase 雲端小程式 clock；USE_CLOCK_FN 改 false 可切回 Apps Script
  v2.18.2  2026-11-18 23:41  精簡程式（兩個 API 呼叫合併、切換月份共用、刪除未使用的函式與樣式）；註解拿掉員工姓名；功能不變
@@ -356,7 +357,7 @@ input[type="date"].input,input[type="time"].input{-webkit-appearance:none;appear
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.20.0</div>
+<div style="position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) - 10px);left:30px;font-size:9px;color:#ccc;pointer-events:none;z-index:10000">v2.20.1</div>
 
 <script>
 const LIFF_ID = '2011700774-SyRPvpY4';
@@ -1479,7 +1480,8 @@ async function renderAllSchedule() {
 init();
 
 // ===== 劃假（兩週一段，2027 起；後端：Supabase 雲端小程式 staff）=====
-let wishData = null, wishMap = {}, wishSwap = {}, wishPick = '例假';
+let wishData = null, wishMap = {}, wishSwap = {}, wishPick = '例假', wishIdx = 0, wishMaps = [], wishSwaps = [];
+function wishP() { return wishData.periods[wishIdx]; }
 const WDOW = ['日','一','二','三','四','五','六'];
 function mdStr(ds) { return Number(ds.slice(5, 7)) + '/' + Number(ds.slice(8, 10)); }
 function addDay(ds, n) { const d = new Date(ds + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
@@ -1494,15 +1496,19 @@ async function openWish() {
     if (window.myRole === '負責人') return renderWishOverview(await staffCall('wishOverview'));
     const r = await staffCall('wishGet');
     if (r.error) { box.innerHTML = '<div class="card">' + esc(r.error) + '</div>'; return; }
-    wishData = r; wishMap = {}; wishSwap = {};
-    (r.wishes || []).forEach(w => { wishMap[w.work_date] = w.wish_type; });
-    (r.swaps || []).forEach(x => { wishSwap[x.holiday_date] = x.swap_date; });
-    wishPick = r.employment_type === '正職' ? '例假' : '可';
-    renderWish();
+    wishData = r; wishIdx = 0;
+    wishMaps = r.periods.map(p => { const m = {}; (p.wishes || []).forEach(w => { m[w.work_date] = w.wish_type; }); return m; });
+    wishSwaps = r.periods.map(p => { const m = {}; (p.swaps || []).forEach(x => { m[x.holiday_date] = x.swap_date; }); return m; });
+    wishSel(0);
   } catch (e) { box.innerHTML = '<div class="card">' + esc(e.message || e) + '</div>'; }
 }
+function wishSel(i) {
+  wishIdx = i; wishMap = wishMaps[i]; wishSwap = wishSwaps[i];
+  wishPick = wishData.employment_type === '正職' ? '例假' : '可';
+  renderWish();
+}
 function wishCal() {
-  const p = wishData.period;
+  const p = wishP();
   let h = '<div class="wcal">' + WDOW.map(x => '<div class="wh">' + x + '</div>').join('');
   for (let i = 0; i < dowOf(p.start); i++) h += '<div></div>';
   wishDays(p.start, p.end).forEach(ds => {
@@ -1514,14 +1520,23 @@ function wishCal() {
   return h + '</div>';
 }
 function wishCount(t) { return Object.values(wishMap).filter(x => x === t).length; }
+function wishCountAll(t) { return wishMaps.reduce((n, m) => n + Object.values(m).filter(x => x === t).length, 0); }
 function renderWish() {
-  const r = wishData, p = r.period, box = document.getElementById('wishBody');
+  const r = wishData, p = wishP(), box = document.getElementById('wishBody');
   const full = r.employment_type === '正職';
-  let h = '<div class="card"><div style="font-weight:600;font-size:16px">' + mdStr(p.start) + '–' + mdStr(p.end) + ' 劃假</div>' +
+  let h = '';
+  if (r.periods.length > 1) {
+    h += '<div class="wchips" style="margin:0 0 10px">' + r.periods.map((q, i) =>
+      '<div class="wchip' + (i === wishIdx ? ' on' : '') + '" onclick="wishSel(' + i + ')" style="font-size:13px;line-height:1.3">' + mdStr(q.start) + '–' + mdStr(q.end) +
+      '<br><span style="font-size:11px">' + (q.state === 'early' ? '可以先劃' : '本次排班') + (q.submitted_at ? '・已送出' : '') + '</span></div>').join('') + '</div>';
+  }
+  h += '<div class="card"><div style="font-weight:600;font-size:16px">' + mdStr(p.start) + '–' + mdStr(p.end) + ' 劃假</div>' +
     '<div style="font-size:13px;color:#666;margin-top:4px">' +
-    (r.open ? '開放中，' + mdStr(p.wish_close) + ' 23:59 截止，期間內可以重複修改' : mdStr(p.wish_open) + ' 開放，' + mdStr(p.wish_close) + ' 截止') +
+    (p.state === 'open' ? '開放中，' + mdStr(p.wish_close) + ' 23:59 截止，期間內可以重複修改' :
+     p.state === 'early' ? '提早劃（選填），' + mdStr(p.wish_close) + ' 23:59 截止，之前都可以改' :
+     mdStr(p.wish_open) + ' 開放，' + mdStr(p.wish_close) + ' 截止') +
     '・' + mdStr(p.publish_by) + ' 公告班表</div>' +
-    (r.submitted_at ? '<div style="font-size:12px;color:#3d9a62;margin-top:4px">✅ 已送出（' + fmtTs(r.submitted_at) + '）</div>' : '<div style="font-size:12px;color:#e65100;margin-top:4px">尚未送出</div>') + '</div>';
+    (p.submitted_at ? '<div style="font-size:12px;color:#3d9a62;margin-top:4px">✅ 已送出（' + fmtTs(p.submitted_at) + '）</div>' : '<div style="font-size:12px;color:#e65100;margin-top:4px">尚未送出</div>') + '</div>';
   const chips = full ? ['例假', '特休'] : ['可', '休'];
   h += '<div class="card"><div style="font-weight:600">' + (full ? '選好假別，再點日期' : '選「可」或「休」，再點日期') + '</div>' +
     '<div class="wchips">' + chips.map(t => '<div class="wchip' + (wishPick === t ? ' on' : '') + '" onclick="wishPick=\'' + t + '\';renderWish()">' + (t === '可' ? '可以上班' : t === '休' ? '不能上班' : t) + '</div>').join('') + '</div>' +
@@ -1529,7 +1544,7 @@ function renderWish() {
   if (full) {
     const al = Math.floor(Number(r.annual_leave_min || 0) / 480 * 10) / 10;
     h += '<div style="font-size:13px;margin-top:10px;line-height:1.7">例假：<b style="color:' + (wishCount('例假') > r.max_rest ? '#c62828' : 'inherit') + '">' + wishCount('例假') + '</b> / ' + r.max_rest + ' 天<br>' +
-      '特休：' + wishCount('特休') + ' 天（可用 ' + al + ' 天）</div>' +
+      '特休：' + wishCount('特休') + ' 天' + (wishMaps.length > 1 ? '（兩段合計 ' + wishCountAll('特休') + ' 天，' : '（') + '可用 ' + al + ' 天）</div>' +
       '<div style="font-size:12px;color:#999;margin-top:6px">每兩週休 4 天：你劃的 2 天是例假，另外 2 天休息日由店長依人力安排。特休另外算。再點一次同一天可以取消。</div>';
   } else {
     h += '<div style="font-size:13px;margin-top:10px">可以上班 ' + wishCount('可') + ' 天・不能上班 ' + wishCount('休') + ' 天</div>' +
@@ -1537,20 +1552,21 @@ function renderWish() {
   }
   h += '<div style="font-size:12px;color:#BE5A34;margin-top:4px">橘框＝國定假日（上班領雙倍薪）</div></div>';
   if (full) h += wishSwapCard();
-  h += '<button class="btn btn-primary" id="wishBtn" onclick="saveWish()"' + (r.open ? '' : ' disabled') + '>' + (r.submitted_at ? '更新送出' : '送出') + '</button>';
+  h += '<button class="btn btn-primary" id="wishBtn" onclick="saveWish()"' + (p.open ? '' : ' disabled') + '>送出 ' + mdStr(p.start) + '–' + mdStr(p.end) + (p.submitted_at ? '（更新）' : '') + '</button>';
+  if (r.periods.length > 1) h += '<div style="font-size:12px;color:#999;text-align:center;margin-top:6px">兩段要分別按送出</div>';
   box.innerHTML = h;
 }
 // 國定假日調移（正職）：這一段裡的國定假日，可以換到同一個 28 天週期的另一天休
 function wishSwapCard() {
-  const r = wishData, p = r.period;
+  const r = wishData, p = wishP();
   const hols = (r.holidays || []).filter(x => x.double_pay && x.date >= p.start && x.date <= p.end);
   if (!hols.length) return '';
-  const opts = wishDays(r.cycle.start, r.cycle.end).filter(ds => !wishHol(ds));
+  const opts = wishDays(p.cycle.start, p.cycle.end).filter(ds => !wishHol(ds));
   let h = '<div class="card"><div style="font-weight:600">國定假日調移</div>' +
     '<div style="font-size:12px;color:#999;margin:4px 0 8px">沒有申請的話，國定假日照休。想在國定假日上班、改天休的，請選要換到哪一天（同一個 28 天週期內）。</div>';
   hols.forEach(x => {
     h += '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px"><div style="flex:1">' + mdStr(x.date) + '（' + WDOW[dowOf(x.date)] + '）' + esc(x.name) + '</div>' +
-      '<select onchange="wishSwapSet(\'' + x.date + '\', this.value)"' + (r.open ? '' : ' disabled') + ' style="padding:6px;border-radius:8px;border:1px solid var(--border)">' +
+      '<select onchange="wishSwapSet(\'' + x.date + '\', this.value)"' + (p.open ? '' : ' disabled') + ' style="padding:6px;border-radius:8px;border:1px solid var(--border)">' +
       '<option value="">照休，不調移</option>' +
       opts.map(ds => '<option value="' + ds + '"' + (wishSwap[x.date] === ds ? ' selected' : '') + '>換到 ' + mdStr(ds) + '（' + WDOW[dowOf(ds)] + '）休</option>').join('') +
       '</select></div>';
@@ -1559,7 +1575,7 @@ function wishSwapCard() {
 }
 function wishSwapSet(hd, v) { if (v) wishSwap[hd] = v; else delete wishSwap[hd]; }
 function wishTap(ds) {
-  if (!wishData.open) return;
+  if (!wishP().open) return;
   if (wishMap[ds] === wishPick) delete wishMap[ds]; else wishMap[ds] = wishPick;
   renderWish();
 }
@@ -1571,10 +1587,11 @@ async function saveWish() {
   try {
     const wishes = Object.keys(wishMap).sort().map(d => ({ work_date: d, wish_type: wishMap[d] }));
     const swaps = r.employment_type === '正職' ? Object.keys(wishSwap).sort().map(d => ({ holiday_date: d, swap_date: wishSwap[d] })) : [];
-    const res = await staffCall('wishSave', { period_id: r.period.period_id, wishes, swaps });
+    const p = wishP();
+    const res = await staffCall('wishSave', { period_id: p.period_id, wishes, swaps });
     if (res.error) { toast(res.error, 4000); btn.disabled = false; btn.textContent = '送出'; return; }
-    toast('已送出 ' + res.saved + ' 天');
-    r.submitted_at = res.submitted_at;
+    toast('已送出 ' + mdStr(p.start) + '–' + mdStr(p.end) + '（' + res.saved + ' 天）');
+    p.submitted_at = res.submitted_at;
     renderWish();
   } catch (e) { toast(e.message || e); btn.disabled = false; btn.textContent = '送出'; }
 }
